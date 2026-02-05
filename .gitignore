@@ -1,6 +1,5 @@
 # Secrets
 .env
-iphone_track_config/
 
 # Python
 __pycache__/
