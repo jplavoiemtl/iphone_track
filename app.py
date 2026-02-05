@@ -1,0 +1,681 @@
+from flask import Flask, render_template, request, jsonify, session, Response
+import json
+import os
+import pytz
+from datetime import datetime
+
+import config
+from lib.geo import get_timezone_from_gps, haversine_with_stationary_detection, format_time
+from lib.owntracks import fetch_owntracks_data
+from lib.activities import parse_activities, calculate_activity_stats
+
+app = Flask(__name__)
+app.secret_key = "iphone-tracker-local-session-key"
+
+# In-memory store for detection results (single-user local app)
+_detection_cache = {}
+
+
+@app.route("/")
+def index():
+    return render_template("index.html", google_maps_api_key=config.GOOGLE_MAPS_API_KEY)
+
+
+@app.route("/api/detect", methods=["POST"])
+def detect_activities():
+    data = request.get_json()
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+    start_time = data.get("start_time", "00:00")
+    end_time = data.get("end_time", "23:59")
+
+    if not start_date or not end_date:
+        return jsonify({"success": False, "error": "start_date and end_date are required"}), 400
+
+    # Phase 1: Timezone discovery - broad fetch for the start date
+    discovery_data = fetch_owntracks_data(
+        start_date, start_date, "00:00", "23:59",
+        server_ip=config.OWNTRACKS_SERVER_IP,
+        server_port=config.OWNTRACKS_SERVER_PORT,
+        user=config.OWNTRACKS_USER,
+        device_id=config.OWNTRACKS_DEVICE_ID,
+        default_timezone=config.DEFAULT_TIMEZONE
+    )
+
+    if not discovery_data:
+        return jsonify({"success": False, "error": f"No data found for {start_date}"}), 404
+
+    first_gps_point = next((item for item in discovery_data if item.get("_type") == "location"), None)
+    if not first_gps_point:
+        return jsonify({"success": False, "error": "No GPS location points found to determine timezone"}), 404
+
+    detected_tz = get_timezone_from_gps(first_gps_point["lat"], first_gps_point["lon"])
+    tz_name = detected_tz.zone
+
+    # Phase 2: Precise fetch with correct timezone
+    raw_data = fetch_owntracks_data(
+        start_date, end_date, start_time, end_time,
+        server_ip=config.OWNTRACKS_SERVER_IP,
+        server_port=config.OWNTRACKS_SERVER_PORT,
+        user=config.OWNTRACKS_USER,
+        device_id=config.OWNTRACKS_DEVICE_ID,
+        target_timezone=detected_tz,
+        default_timezone=config.DEFAULT_TIMEZONE
+    )
+
+    if not raw_data:
+        return jsonify({
+            "success": False,
+            "error": f"No data for time range {start_time}-{end_time} in {tz_name}"
+        }), 404
+
+    gps_points, activities = parse_activities(raw_data)
+
+    if not gps_points:
+        return jsonify({"success": False, "error": "No GPS points found in the data"}), 404
+
+    activity_stats = calculate_activity_stats(activities)
+
+    # Cache results for track endpoint
+    _detection_cache["gps_points"] = gps_points
+    _detection_cache["activities"] = activities
+    _detection_cache["activity_stats"] = activity_stats
+    _detection_cache["detected_tz"] = detected_tz
+    _detection_cache["raw_data"] = raw_data
+
+    # Build timeline
+    lwt_markers = [item for item in raw_data if item.get("_type") == "lwt" and item.get("custom") is True]
+    timeline = _build_timeline(gps_points, activities, lwt_markers, detected_tz)
+
+    # Format stats for JSON response
+    stats_response = {}
+    for activity_type in ['car', 'bike', 'other']:
+        if activity_type in activity_stats:
+            s = activity_stats[activity_type]
+            stats_response[activity_type] = {
+                'count': s['count'],
+                'total_distance': round(s['total_distance'], 2),
+                'total_duration': s['total_duration'],
+                'total_duration_str': format_time(s['total_duration']),
+                'total_points': s['total_points'],
+                'filtered_count': s.get('filtered_count', 0),
+                'avg_speed': round((s['total_distance'] / s['total_duration'] * 3600), 1) if s['total_duration'] > 0 else 0
+            }
+
+    return jsonify({
+        "success": True,
+        "timezone": tz_name,
+        "total_points": len(gps_points),
+        "activity_markers": len(lwt_markers),
+        "stats": stats_response,
+        "timeline": timeline
+    })
+
+
+@app.route("/api/track/<activity_type>")
+def get_track_data(activity_type):
+    if not _detection_cache.get("activities"):
+        return jsonify({"success": False, "error": "No detection data. Run detect first."}), 400
+
+    activities = _detection_cache["activities"]
+    gps_points = _detection_cache["gps_points"]
+    activity_stats = _detection_cache["activity_stats"]
+    detected_tz = _detection_cache["detected_tz"]
+
+    ride_colors = {
+        'car': ['#FF0000', '#FF8C00', '#FFD700', '#FF1493', '#8B0000'],
+        'bike': ['#FF8C00', '#228B22', '#1E90FF', '#8B4513', '#4B0082', '#DC143C', '#00CED1'],
+        'other': ['#800080', '#FF00FF', '#FFA500', '#00FFFF', '#8B4513']
+    }
+
+    if activity_type == 'all':
+        if not gps_points:
+            return jsonify({"success": False, "error": "No GPS points available"}), 404
+
+        layer_distance = 0
+        if len(gps_points) > 1:
+            for i in range(1, len(gps_points)):
+                prev = gps_points[i - 1]
+                curr = gps_points[i]
+                distance = haversine_with_stationary_detection(
+                    prev["lat"], prev["lon"], curr["lat"], curr["lon"])
+                layer_distance += distance * 1.05
+            layer_duration = gps_points[-1]["tst"] - gps_points[0]["tst"]
+        else:
+            layer_duration = 0
+
+        start_local = datetime.fromtimestamp(gps_points[0]['tst'], tz=pytz.UTC).astimezone(detected_tz)
+        end_local = datetime.fromtimestamp(gps_points[-1]['tst'], tz=pytz.UTC).astimezone(detected_tz)
+
+        return jsonify({
+            "success": True,
+            "activity_type": "all",
+            "mode": "basic",
+            "points": [{"lat": p["lat"], "lng": p["lon"], "tst": p["tst"]} for p in gps_points],
+            "stats": {
+                "distance": round(layer_distance, 2),
+                "duration": layer_duration,
+                "rides": sum(activity_stats.get(a, {}).get('count', 0) for a in ['car', 'bike', 'other']),
+                "points": len(gps_points)
+            },
+            "start_time_str": start_local.strftime('%H:%M:%S'),
+            "end_time_str": end_local.strftime('%H:%M:%S')
+        })
+
+    if activity_type not in activities or not activities[activity_type]:
+        return jsonify({"success": False, "error": f"No {activity_type} activities found"}), 404
+
+    colors = ride_colors.get(activity_type, ['#FFA500'])
+    rides_data = []
+
+    for ride_idx, ride in enumerate(activities[activity_type]):
+        if not ride['points']:
+            continue
+
+        color = colors[ride_idx % len(colors)]
+        start_timestamp = ride['start']
+        end_timestamp = ride['end']
+
+        start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
+        end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
+
+        ride_distance = 0
+        if len(ride['points']) > 1:
+            for j in range(1, len(ride['points'])):
+                prev = ride['points'][j - 1]
+                curr = ride['points'][j]
+                distance = haversine_with_stationary_detection(
+                    prev["lat"], prev["lon"], curr["lat"], curr["lon"])
+                ride_distance += distance * 1.05
+
+        ride_duration = end_timestamp - start_timestamp
+        avg_speed = (ride_distance / ride_duration * 3600) if ride_duration > 0 else 0
+
+        rides_data.append({
+            'ride_number': ride_idx + 1,
+            'start_timestamp': start_timestamp,
+            'end_timestamp': end_timestamp,
+            'start_time_str': start_local.strftime('%H:%M:%S'),
+            'end_time_str': end_local.strftime('%H:%M:%S'),
+            'points': [{"lat": p["lat"], "lng": p["lon"], "tst": p["tst"]} for p in ride['points']],
+            'distance': round(ride_distance, 2),
+            'duration': ride_duration,
+            'avg_speed': round(avg_speed, 1),
+            'color': color
+        })
+
+    stats = activity_stats.get(activity_type, {})
+
+    return jsonify({
+        "success": True,
+        "activity_type": activity_type,
+        "mode": "rich",
+        "rides": rides_data,
+        "stats": {
+            "distance": round(stats.get('total_distance', 0), 2),
+            "duration": stats.get('total_duration', 0),
+            "rides": stats.get('count', 0),
+            "points": stats.get('total_points', 0)
+        }
+    })
+
+
+@app.route("/api/save-map", methods=["POST"])
+def save_map():
+    if not _detection_cache.get("activities"):
+        return jsonify({"success": False, "error": "No detection data. Run detect first."}), 400
+
+    data = request.get_json()
+    active_layers = data.get("active_layers", [])
+
+    if not active_layers:
+        return jsonify({"success": False, "error": "No active layers to save"}), 400
+
+    gps_points = _detection_cache["gps_points"]
+    activities = _detection_cache["activities"]
+    activity_stats = _detection_cache["activity_stats"]
+    detected_tz = _detection_cache["detected_tz"]
+
+    # Build layer data and ride data for embedding
+    saved_layers_data = {}
+    saved_rides_data = {}
+
+    ride_colors = {
+        'car': ['#FF0000', '#FF8C00', '#FFD700', '#FF1493', '#8B0000'],
+        'bike': ['#FF8C00', '#228B22', '#1E90FF', '#8B4513', '#4B0082', '#DC143C', '#00CED1'],
+        'other': ['#800080', '#FF00FF', '#FFA500', '#00FFFF', '#8B4513']
+    }
+
+    for layer_type in active_layers:
+        if layer_type == 'all':
+            points = gps_points
+        elif layer_type in activities:
+            points = []
+            for ride in activities[layer_type]:
+                points.extend(ride['points'])
+            points.sort(key=lambda x: x['tst'])
+        else:
+            continue
+
+        if not points:
+            continue
+
+        if layer_type in activity_stats:
+            stats = activity_stats[layer_type]
+            layer_distance = stats.get('total_distance', 0)
+            layer_duration = stats.get('total_duration', 0)
+            layer_rides = stats.get('count', 0)
+        else:
+            layer_distance = 0
+            if len(points) > 1:
+                for i in range(1, len(points)):
+                    d = haversine_with_stationary_detection(
+                        points[i - 1]["lat"], points[i - 1]["lon"],
+                        points[i]["lat"], points[i]["lon"])
+                    layer_distance += d * 1.05
+                layer_duration = points[-1]["tst"] - points[0]["tst"]
+            else:
+                layer_duration = 0
+            layer_rides = sum(activity_stats.get(a, {}).get('count', 0) for a in ['car', 'bike', 'other'])
+
+        start_local = datetime.fromtimestamp(points[0]['tst'], tz=pytz.UTC).astimezone(detected_tz)
+        end_local = datetime.fromtimestamp(points[-1]['tst'], tz=pytz.UTC).astimezone(detected_tz)
+
+        saved_layers_data[layer_type] = {
+            'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in points],
+            'stats': {
+                'distance': layer_distance,
+                'duration': layer_duration,
+                'rides': layer_rides,
+                'points': len(points),
+                'start_time_str': start_local.strftime('%H:%M:%S'),
+                'end_time_str': end_local.strftime('%H:%M:%S')
+            }
+        }
+
+        if layer_type in ['car', 'bike', 'other'] and layer_type in activities:
+            colors = ride_colors.get(layer_type, ['#FFA500'])
+            saved_rides_data[layer_type] = []
+            for ride_idx, ride in enumerate(activities[layer_type]):
+                if not ride['points']:
+                    continue
+                s_local = datetime.fromtimestamp(ride['start'], tz=pytz.UTC).astimezone(detected_tz)
+                e_local = datetime.fromtimestamp(ride['end'], tz=pytz.UTC).astimezone(detected_tz)
+                saved_rides_data[layer_type].append({
+                    'start': ride['start'],
+                    'end': ride['end'],
+                    'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in ride['points']],
+                    'start_time_str': s_local.strftime('%H:%M:%S'),
+                    'end_time_str': e_local.strftime('%H:%M:%S'),
+                    'color': colors[ride_idx % len(colors)]
+                })
+
+    # Generate filename
+    now = datetime.now()
+    start_date = data.get("start_date", now.strftime("%Y-%m-%d"))
+    end_date = data.get("end_date", start_date)
+    date_str = start_date if start_date == end_date else f"{start_date}_to_{end_date}"
+    layer_names = "_".join(sorted(active_layers))
+    timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"interactive_map_{date_str}_{layer_names}_{timestamp}.html"
+
+    # Generate self-contained HTML
+    html = _generate_saved_map_html(
+        saved_layers_data, saved_rides_data,
+        date_range=f"{start_date} to {end_date}",
+        active_layers=active_layers,
+        total_points=len(gps_points),
+        saved_timestamp=now.strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+    # Save to saved_maps directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    saved_maps_dir = os.path.join(script_dir, "saved_maps")
+    os.makedirs(saved_maps_dir, exist_ok=True)
+    saved_path = os.path.join(saved_maps_dir, filename)
+    with open(saved_path, 'w', encoding='utf-8', newline='') as f:
+        f.write(html)
+
+    return jsonify({
+        "success": True,
+        "filename": filename,
+        "path": saved_path,
+        "layers": active_layers,
+        "total_points": len(gps_points)
+    })
+
+
+def _generate_saved_map_html(saved_layers_data, saved_rides_data, date_range, active_layers, total_points, saved_timestamp):
+    title = f"GPS Multi-Layer Tracking - {date_range} ({len(active_layers)} layers)"
+    layers_json = json.dumps(saved_layers_data)
+    rides_json = json.dumps(saved_rides_data)
+    api_key = config.GOOGLE_MAPS_API_KEY
+    layers_list = ', '.join(active_layers)
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>{title}</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key={api_key}&callback=initMap" async defer></script>
+    <script>
+        var map;
+        var activityLayers = {{}};
+        var layerVisibility = {{}};
+
+        var savedLayersData = {layers_json};
+        var savedRidesData = {rides_json};
+
+        var activityConfig = {{
+            'car': {{ color: '#FF4444', icon: '\\u{{1F697}}', name: 'Car' }},
+            'bike': {{ color: '#FFD700', icon: '\\u{{1F6B4}}', name: 'Bike' }},
+            'other': {{ color: '#4444FF', icon: '\\u{{1F6B6}}', name: 'Other' }},
+            'all': {{ color: '#FFA500', icon: '\\u{{1F4CD}}', name: 'All' }}
+        }};
+
+        function initMap() {{
+            map = new google.maps.Map(document.getElementById('map'), {{
+                center: {{ lat: 0, lng: 0 }},
+                zoom: 15,
+                mapTypeId: 'roadmap'
+            }});
+            createLayerControl();
+            loadSavedLayers();
+        }}
+
+        function loadSavedLayers() {{
+            var bounds = new google.maps.LatLngBounds();
+            var hasData = false;
+
+            Object.keys(savedLayersData).forEach(function(activityType) {{
+                var layerData = savedLayersData[activityType];
+                var points = layerData.points;
+                var stats = layerData.stats;
+
+                if (points && points.length > 0) {{
+                    if (savedRidesData[activityType] && savedRidesData[activityType].length > 0) {{
+                        addActivityWithIndividualRides(activityType, savedRidesData[activityType], stats);
+                    }} else {{
+                        addActivityLayerWithStats(activityType, points, stats);
+                    }}
+                    points.forEach(function(p) {{
+                        bounds.extend(new google.maps.LatLng(p.lat, p.lng));
+                        hasData = true;
+                    }});
+                }}
+            }});
+
+            if (hasData) {{
+                map.fitBounds(bounds);
+                google.maps.event.addListenerOnce(map, 'bounds_changed', function() {{
+                    if (map.getZoom() > 16) map.setZoom(16);
+                    updateLayerControl();
+                }});
+            }}
+            setTimeout(function() {{ calculateTotalDistance(); updateLayerControl(); }}, 1000);
+        }}
+
+        function addActivityWithIndividualRides(activityType, rides, stats) {{
+            if (!activityLayers[activityType]) {{
+                activityLayers[activityType] = {{ paths: [], markers: [], visible: true }};
+                layerVisibility[activityType] = true;
+            }}
+            var config = activityConfig[activityType] || activityConfig['all'];
+            var layer = activityLayers[activityType];
+
+            rides.forEach(function(ride, rideIndex) {{
+                var rideColor = ride.color || config.color;
+                var points = ride.points;
+                for (var i = 1; i < points.length; i++) {{
+                    var seg = new google.maps.Polyline({{
+                        path: [{{ lat: points[i-1].lat, lng: points[i-1].lng }}, {{ lat: points[i].lat, lng: points[i].lng }}],
+                        geodesic: true, strokeColor: rideColor, strokeOpacity: 0.8, strokeWeight: 4,
+                        map: layer.visible ? map : null
+                    }});
+                    layer.paths.push(seg);
+                }}
+                addSavedRideMarkers(activityType, ride, rideIndex + 1, rideColor, layer);
+            }});
+            updateLayerControl();
+        }}
+
+        function addSavedRideMarkers(activityType, ride, rideNumber, rideColor, layer) {{
+            var config = activityConfig[activityType] || activityConfig['all'];
+            var points = ride.points;
+            if (points.length === 0) return;
+
+            var startPoint = points[0];
+            for (var i = 0; i < points.length; i++) {{ if (points[i].tst >= ride.start) {{ startPoint = points[i]; break; }} }}
+
+            var endPoint = points[points.length - 1];
+            for (var i = points.length - 1; i >= 0; i--) {{ if (points[i].tst <= ride.end) {{ endPoint = points[i]; break; }} }}
+
+            var rideDuration = ride.end - ride.start;
+            var dh = Math.floor(rideDuration / 3600);
+            var dm = Math.floor((rideDuration % 3600) / 60);
+            var rideDistance = 0;
+            for (var i = 1; i < points.length; i++) {{
+                var la1=points[i-1].lat*Math.PI/180, lo1=points[i-1].lng*Math.PI/180;
+                var la2=points[i].lat*Math.PI/180, lo2=points[i].lng*Math.PI/180;
+                var dla=la2-la1, dlo=lo2-lo1;
+                var a=Math.sin(dla/2)*Math.sin(dla/2)+Math.cos(la1)*Math.cos(la2)*Math.sin(dlo/2)*Math.sin(dlo/2);
+                var sd=6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+                if(sd>=0.01) rideDistance+=sd*1.05;
+            }}
+            var avgSpeed = rideDuration > 0 ? (rideDistance / rideDuration * 3600) : 0;
+
+            var sm = new google.maps.Marker({{
+                position: {{ lat: startPoint.lat, lng: startPoint.lng }},
+                map: layer.visible ? map : null,
+                title: config.name + ' Ride ' + rideNumber + ' Start',
+                icon: {{ path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 6, fillColor: rideColor, fillOpacity: 1, strokeColor: '#FFF', strokeWeight: 2 }},
+                zIndex: 1000 + rideNumber
+            }});
+            var si = new google.maps.InfoWindow({{ content: '<div style="font-size:12px;min-width:150px;">' + config.name + ' Ride ' + rideNumber + '<br>Start: ' + ride.start_time_str + '</div>' }});
+            sm.addListener('click', function() {{ si.open(map, sm); }});
+            layer.markers.push(sm);
+
+            var endInfo = config.name + ' Ride ' + rideNumber + '<br>End: ' + ride.end_time_str + '<br>Distance: ' + rideDistance.toFixed(2) + ' km<br>Duration: ' + dh + 'h ' + dm + 'm<br>Avg Speed: ' + avgSpeed.toFixed(1) + ' km/h<br>Points: ' + points.length;
+            var em = new google.maps.Marker({{
+                position: {{ lat: endPoint.lat, lng: endPoint.lng }},
+                map: layer.visible ? map : null,
+                title: config.name + ' Ride ' + rideNumber + ' End',
+                icon: {{ path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: rideColor, fillOpacity: 0.9, strokeColor: '#FFF', strokeWeight: 2 }},
+                zIndex: 999 + rideNumber
+            }});
+            var ei = new google.maps.InfoWindow({{ content: '<div style="font-size:12px;min-width:150px;">' + endInfo + '</div>' }});
+            em.addListener('click', function() {{ ei.open(map, em); }});
+            layer.markers.push(em);
+        }}
+
+        function addActivityLayerWithStats(activityType, points, stats) {{
+            if (!activityLayers[activityType]) {{
+                activityLayers[activityType] = {{ paths: [], markers: [], visible: true }};
+                layerVisibility[activityType] = true;
+            }}
+            var config = activityConfig[activityType] || activityConfig['all'];
+            var layer = activityLayers[activityType];
+
+            for (var i = 1; i < points.length; i++) {{
+                var seg = new google.maps.Polyline({{
+                    path: [{{ lat: points[i-1].lat, lng: points[i-1].lng }}, {{ lat: points[i].lat, lng: points[i].lng }}],
+                    geodesic: true, strokeColor: config.color, strokeOpacity: 0.8, strokeWeight: 4,
+                    map: layer.visible ? map : null
+                }});
+                layer.paths.push(seg);
+            }}
+            if (points.length > 0) {{
+                var sm = new google.maps.Marker({{
+                    position: {{ lat: points[0].lat, lng: points[0].lng }},
+                    map: layer.visible ? map : null,
+                    icon: {{ path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 6, fillColor: config.color, fillOpacity: 1, strokeColor: '#FFF', strokeWeight: 2 }},
+                    zIndex: 1000
+                }});
+                var si = new google.maps.InfoWindow({{ content: '<div style="font-size:12px;"><strong>' + config.name + ' Start</strong><br>' + stats.start_time_str + '</div>' }});
+                sm.addListener('click', function() {{ si.open(map, sm); }});
+                layer.markers.push(sm);
+
+                var dh = Math.floor(stats.duration / 3600);
+                var dm = Math.floor((stats.duration % 3600) / 60);
+                var as = stats.duration > 0 ? (stats.distance / stats.duration * 3600) : 0;
+                var endContent = '<div style="font-size:12px;min-width:150px;"><strong>' + config.name + ' End</strong><br>Time: ' + stats.end_time_str + '<br>Distance: ' + stats.distance.toFixed(2) + ' km<br>Duration: ' + dh + 'h ' + dm + 'm<br>Avg Speed: ' + as.toFixed(1) + ' km/h<br>Points: ' + stats.points + '</div>';
+                var em = new google.maps.Marker({{
+                    position: {{ lat: points[points.length-1].lat, lng: points[points.length-1].lng }},
+                    map: layer.visible ? map : null,
+                    icon: {{ path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: config.color, fillOpacity: 0.9, strokeColor: '#FFF', strokeWeight: 3 }},
+                    zIndex: 999
+                }});
+                var ei = new google.maps.InfoWindow({{ content: endContent }});
+                em.addListener('click', function() {{ ei.open(map, em); }});
+                layer.markers.push(em);
+            }}
+            updateLayerControl();
+        }}
+
+        function toggleLayer(activityType) {{
+            if (!activityLayers[activityType]) return;
+            var layer = activityLayers[activityType];
+            var isVisible = !layer.visible;
+            layer.visible = isVisible;
+            layerVisibility[activityType] = isVisible;
+            layer.paths.forEach(function(p) {{ p.setMap(isVisible ? map : null); }});
+            layer.markers.forEach(function(m) {{ m.setMap(isVisible ? map : null); }});
+            updateLayerControl();
+            calculateTotalDistance();
+        }}
+
+        function createLayerControl() {{
+            var div = document.createElement('div');
+            div.id = 'layerControl';
+            div.innerHTML = '<div style="background:rgba(255,255,255,0.95);border:2px solid #666;border-radius:8px;margin:10px;padding:12px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);min-width:200px;"><div style="font-weight:bold;margin-bottom:10px;color:#333;font-size:14px;text-align:center;border-bottom:1px solid #ddd;padding-bottom:8px;">Active Layers</div><div id="layerList"></div></div>';
+            map.controls[google.maps.ControlPosition.TOP_LEFT].push(div);
+        }}
+
+        function updateLayerControl() {{
+            var list = document.getElementById('layerList');
+            if (!list) return;
+            list.innerHTML = '';
+            Object.keys(activityLayers).forEach(function(type) {{
+                var layer = activityLayers[type];
+                if (layer.paths.length > 0 || layer.markers.length > 0) {{
+                    var cfg = activityConfig[type] || activityConfig['all'];
+                    var vis = layerVisibility[type];
+                    var item = document.createElement('div');
+                    item.style.cssText = 'display:flex;align-items:center;margin:8px 0;padding:6px;background:rgba(248,248,248,0.8);border-radius:6px;border:1px solid #e0e0e0;';
+                    item.innerHTML = '<span style="font-size:16px;margin-right:8px;">' + cfg.icon + '</span><span style="flex-grow:1;font-weight:500;color:#333;">' + cfg.name + '</span><button onclick="toggleLayer(\\'' + type + '\\')" style="padding:4px 8px;border:none;border-radius:4px;color:white;font-size:10px;font-weight:bold;cursor:pointer;background:' + cfg.color + ';opacity:' + (vis ? '1' : '0.5') + ';">' + (vis ? 'Hide' : 'Show') + '</button>';
+                    list.appendChild(item);
+                }}
+            }});
+        }}
+
+        function calculateTotalDistance() {{
+            var total = 0;
+            if ('all' in savedLayersData && layerVisibility['all'] !== false) {{
+                total = savedLayersData['all'].stats.distance;
+            }} else {{
+                Object.keys(savedLayersData).forEach(function(type) {{
+                    if (type !== 'all' && layerVisibility[type] !== false) {{
+                        total += savedLayersData[type].stats.distance;
+                    }}
+                }});
+            }}
+            document.getElementById('distanceTitle').innerText = 'Saved Interactive Map - Total Distance: ' + total.toFixed(3) + ' km';
+        }}
+    </script>
+    <style>
+        body {{ margin: 0; font-family: Arial, sans-serif; background-color: #d3d3d3; }}
+        h1 {{ font-size: 18px; margin: 5px; color: #333; background-color: #e8f5e8; padding: 5px; border-radius: 4px; }}
+        #map {{ height: 95vh; width: 100%; }}
+    </style>
+</head>
+<body>
+    <h1 id="distanceTitle">Total Distance: 0 km</h1>
+    <div id="map"></div>
+    <div style="position:absolute;top:100px;right:10px;background:rgba(255,255,255,0.95);border:2px solid #666;border-radius:8px;padding:12px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);z-index:1000;max-width:250px;">
+        <div style="font-weight:bold;margin-bottom:8px;color:#333;font-size:13px;">Session Info</div>
+        <div><strong>Date:</strong> {date_range}</div>
+        <div><strong>Saved:</strong> {saved_timestamp}</div>
+        <div><strong>Layers:</strong> {layers_list}</div>
+        <div><strong>Total Points:</strong> {total_points:,}</div>
+        <div style="margin-top:8px;font-size:11px;color:#666;font-style:italic;">Use layer controls (left) to show/hide</div>
+    </div>
+</body>
+</html>"""
+
+
+def _build_timeline(gps_points, activities, lwt_markers, detected_tz):
+    timeline = []
+
+    all_activities = []
+    for activity_type in ['car', 'bike']:
+        if activity_type in activities:
+            for activity in activities[activity_type]:
+                all_activities.append({
+                    'start': activity['start'],
+                    'end': activity['end'],
+                    'type': activity_type
+                })
+
+    all_activities.sort(key=lambda x: x['start'])
+
+    if 'other' in activities and activities['other']:
+        first_gps_time = min(p['tst'] for p in gps_points) if gps_points else 0
+        current_time = first_gps_time
+
+        for activity in all_activities:
+            if current_time < activity['start']:
+                timeline.append({
+                    'timestamp': current_time,
+                    'event': 'other_start',
+                    'type': 'generated'
+                })
+                timeline.append({
+                    'timestamp': activity['start'],
+                    'event': 'other_end',
+                    'type': 'generated'
+                })
+
+            timeline.append({
+                'timestamp': activity['start'],
+                'event': f"{activity['type']}_start",
+                'type': 'real'
+            })
+            timeline.append({
+                'timestamp': activity['end'],
+                'event': f"{activity['type']}_end",
+                'type': 'real'
+            })
+            current_time = activity['end']
+
+        last_gps_time = max(p['tst'] for p in gps_points) if gps_points else 0
+        if current_time < last_gps_time:
+            timeline.append({
+                'timestamp': current_time,
+                'event': 'other_start',
+                'type': 'generated'
+            })
+            timeline.append({
+                'timestamp': last_gps_time,
+                'event': 'other_end',
+                'type': 'generated'
+            })
+    else:
+        for marker in lwt_markers:
+            timeline.append({
+                'timestamp': marker["tst"],
+                'event': marker.get("activity", "unknown"),
+                'type': 'real'
+            })
+
+    timeline.sort(key=lambda x: x['timestamp'])
+
+    # Format timestamps for display
+    for event in timeline:
+        ts_utc = datetime.fromtimestamp(event['timestamp'], tz=pytz.UTC)
+        ts_local = ts_utc.astimezone(detected_tz)
+        event['time'] = ts_local.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+    return timeline
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

@@ -1,0 +1,36 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Generated files
+map.html
+saved_maps/
+
+# Documentation (contains credentials)
+doc/
+
+# Data files
+GPS_activity_markers.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+settings.local.json
+
+# Reference code
+reference_code/
+
+# OS
+.DS_Store
+Thumbs.db

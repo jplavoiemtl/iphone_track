@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>GPS Activity Tracking</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <button id="sidebar-toggle" aria-label="Toggle panel">&#9776;</button>
+    <div id="sidebar-backdrop"></div>
+
+    <div id="sidebar">
+        <h1>GPS Activity Tracking</h1>
+
+        <!-- Date & Time Selection -->
+        <div class="panel">
+            <h2>Date & Time Selection</h2>
+            <div class="form-row">
+                <label for="start-date">Start Date:</label>
+                <input type="date" id="start-date">
+            </div>
+            <div class="form-row">
+                <label for="end-date">End Date:</label>
+                <input type="date" id="end-date">
+            </div>
+            <div class="form-row">
+                <label for="start-time">Start Time:</label>
+                <input type="time" id="start-time" value="00:00">
+            </div>
+            <div class="form-row">
+                <label for="end-time">End Time:</label>
+                <input type="time" id="end-time" value="23:59">
+            </div>
+            <div class="form-row">
+                <label>Timezone:</label>
+                <span id="timezone-display">Will be detected from GPS data</span>
+            </div>
+            <button id="detect-btn" class="btn btn-primary btn-full">Detect Activities</button>
+        </div>
+
+        <!-- Activity Summary -->
+        <div id="activity-summary" class="panel">
+            <h2>Activity Detection Results</h2>
+            <div id="summary-content"></div>
+        </div>
+
+        <!-- Activity Controls -->
+        <div id="activity-controls" class="panel">
+            <h2>Activity Controls</h2>
+            <label for="primary-activity">Start Tracking:</label>
+            <select id="primary-activity" class="activity-select"></select>
+            <button id="start-tracking-btn" class="btn btn-success btn-full" disabled>Start Tracking</button>
+
+            <div style="margin-top:12px;">
+                <label>Add Layers:</label>
+                <div id="layer-checkboxes" class="layer-checkboxes"></div>
+                <button id="add-layers-btn" class="btn btn-primary" style="margin-top:6px;">Add Selected Layers</button>
+            </div>
+        </div>
+
+        <!-- Tracking Info -->
+        <div id="tracking-info" class="panel">
+            <h2>Tracking Information</h2>
+            <div class="stats-grid">
+                <span class="stat-label">Distance:</span>
+                <span class="stat-value" id="stat-distance">0.00 km</span>
+                <span class="stat-label">Duration:</span>
+                <span class="stat-value" id="stat-duration">0h 0m</span>
+                <span class="stat-label">Avg Speed:</span>
+                <span class="stat-value" id="stat-speed">0.0 km/h</span>
+                <span class="stat-label">Points:</span>
+                <span class="stat-value" id="stat-points">0</span>
+                <span class="stat-label">Time:</span>
+                <span class="stat-value" id="stat-time">--:--:--</span>
+            </div>
+            <div class="active-layers">
+                Active Layers: <span id="active-layers-text">None</span>
+            </div>
+            <div id="pause-status"></div>
+            <button id="save-map-btn" class="btn btn-primary btn-full" style="margin-top:10px;" onclick="saveInteractiveMap()">Save Interactive Map</button>
+            <div id="save-status"></div>
+        </div>
+    </div>
+
+    <div id="map-container">
+        <div id="map"></div>
+        <div id="playback-controls">
+            <button id="step-back-btn" disabled>&#171; Back</button>
+            <button id="pause-play-btn">Pause</button>
+            <button id="step-forward-btn" disabled>Forward &#187;</button>
+        </div>
+    </div>
+
+    <script src="/static/js/map.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap" async defer></script>
+</body>
+</html>
