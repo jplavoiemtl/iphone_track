@@ -27,6 +27,8 @@ static/             # Frontend assets
 doc/                # Project documentation
   plan.md           # Technology comparison and project plan
   architecture.md   # Architecture and API contracts
+Dockerfile          # Docker image for Raspberry Pi deployment
+iphone_track_config/# Deployment config (git-ignored, contains .env)
 iphonetrack.py      # Original desktop app (reference)
 ```
 
@@ -55,6 +57,16 @@ Required secrets (see `.env.example`):
 - Keep functions focused and small - match the existing module structure
 - Backend handles all data processing; frontend only handles display
 - API responses use JSON; all timestamps are UTC epoch seconds
+
+## Docker Deployment (Raspberry Pi 4 / labpi)
+- The app runs in a Docker container on labpi using gunicorn
+- `Dockerfile` in the project root defines the image
+- `iphone_track_config/.env` holds deployment secrets (git-ignored)
+- The container is part of the labpi docker-compose stack (`labpi.yml`)
+- `GPS_activity_markers.json` is bind-mounted read-only from Node-RED's volume
+- `saved_maps/` is bind-mounted for persistence
+- Full deployment plan: `doc/Move_to_labpi_Implementation_Plan.md`
+- Original planning analysis: `doc/Move_iphone_track_to_labpi_Planning.md`
 
 ## Planning & Documentation
 - All planning documents and implementation plans go in the `doc/` folder
