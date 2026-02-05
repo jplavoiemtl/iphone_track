@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, session, Response
 import json
 import os
 import pytz
+import uuid
 from datetime import datetime
 
 import config
@@ -12,8 +13,16 @@ from lib.activities import parse_activities, calculate_activity_stats
 app = Flask(__name__)
 app.secret_key = config.FLASK_SECRET_KEY
 
-# In-memory store for detection results (single-user local app)
-_detection_cache = {}
+# In-memory store for detection results, keyed by session ID
+# Each browser/device gets its own cache to avoid conflicts
+_session_caches = {}
+
+
+def _get_cache():
+    """Get the cache for the current session. Creates session ID if needed."""
+    if 'cache_id' not in session:
+        session['cache_id'] = str(uuid.uuid4())
+    return _session_caches.setdefault(session['cache_id'], {})
 
 
 @app.route("/")
@@ -76,12 +85,13 @@ def detect_activities():
 
     activity_stats = calculate_activity_stats(activities)
 
-    # Cache results for track endpoint
-    _detection_cache["gps_points"] = gps_points
-    _detection_cache["activities"] = activities
-    _detection_cache["activity_stats"] = activity_stats
-    _detection_cache["detected_tz"] = detected_tz
-    _detection_cache["raw_data"] = raw_data
+    # Cache results for track endpoint (per-session)
+    cache = _get_cache()
+    cache["gps_points"] = gps_points
+    cache["activities"] = activities
+    cache["activity_stats"] = activity_stats
+    cache["detected_tz"] = detected_tz
+    cache["raw_data"] = raw_data
 
     # Build timeline
     lwt_markers = [item for item in raw_data if item.get("_type") == "lwt" and item.get("custom") is True]
@@ -114,13 +124,14 @@ def detect_activities():
 
 @app.route("/api/track/<activity_type>")
 def get_track_data(activity_type):
-    if not _detection_cache.get("activities"):
+    cache = _get_cache()
+    if not cache.get("activities"):
         return jsonify({"success": False, "error": "No detection data. Run detect first."}), 400
 
-    activities = _detection_cache["activities"]
-    gps_points = _detection_cache["gps_points"]
-    activity_stats = _detection_cache["activity_stats"]
-    detected_tz = _detection_cache["detected_tz"]
+    activities = cache["activities"]
+    gps_points = cache["gps_points"]
+    activity_stats = cache["activity_stats"]
+    detected_tz = cache["detected_tz"]
 
     ride_colors = {
         'car': ['#FF0000', '#FF8C00', '#FFD700', '#FF1493', '#8B0000'],
@@ -222,7 +233,8 @@ def get_track_data(activity_type):
 
 @app.route("/api/save-map", methods=["POST"])
 def save_map():
-    if not _detection_cache.get("activities"):
+    cache = _get_cache()
+    if not cache.get("activities"):
         return jsonify({"success": False, "error": "No detection data. Run detect first."}), 400
 
     data = request.get_json()
@@ -231,10 +243,10 @@ def save_map():
     if not active_layers:
         return jsonify({"success": False, "error": "No active layers to save"}), 400
 
-    gps_points = _detection_cache["gps_points"]
-    activities = _detection_cache["activities"]
-    activity_stats = _detection_cache["activity_stats"]
-    detected_tz = _detection_cache["detected_tz"]
+    gps_points = cache["gps_points"]
+    activities = cache["activities"]
+    activity_stats = cache["activity_stats"]
+    detected_tz = cache["detected_tz"]
 
     # Build layer data and ride data for embedding
     saved_layers_data = {}

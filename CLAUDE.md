@@ -55,6 +55,16 @@ Required environment variables:
 - Backend handles all data processing; frontend only handles display
 - API responses use JSON; all timestamps are UTC epoch seconds
 
+## Multi-Device Support
+The app uses session-based caching so multiple devices (desktop, phone) can use
+the app simultaneously without conflicts. Each browser gets a unique session ID
+stored in a cookie, and detection results are cached per-session in memory.
+
+- Detection data is stored in `_session_caches[session_id]` instead of a global variable
+- This allows desktop to detect Monday's activities while phone detects Tuesday's
+- Sessions are isolated — one device's actions don't affect another's view
+- The `FLASK_SECRET_KEY` environment variable is required for session cookies
+
 ## Docker Deployment (Raspberry Pi 4 / labpi)
 - The app runs in a Docker container on labpi using gunicorn with `--reload`
 - `Dockerfile` in the project root defines the image (installs Python dependencies)
