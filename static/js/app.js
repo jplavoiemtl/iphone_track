@@ -406,22 +406,26 @@ function updateTrackingInfo() {
 
     document.getElementById('active-layers-text').textContent = layerText || 'None';
 
-    // Update stats from detection data
     if (detectionData) {
+        // If 'all' layer is active, keep its stats (from animation) - individual layers
+        // are subsets of 'all', so we shouldn't add them to avoid double-counting.
+        if (activeLayers.has('all')) {
+            // Just update points count, keep distance/duration/speed from animation
+            document.getElementById('stat-points').textContent = detectionData.total_points.toLocaleString();
+            return;
+        }
+
+        // Only individual layers active (no 'all') - sum their stats
         var totalDist = 0;
         var totalDur = 0;
         var totalPts = 0;
 
         activeLayers.forEach(function(type) {
-            if (type === 'all') {
-                totalPts = detectionData.total_points;
-            } else {
-                var s = detectionData.stats[type];
-                if (s) {
-                    totalDist += s.total_distance;
-                    totalDur += s.total_duration;
-                    totalPts += s.total_points;
-                }
+            var s = detectionData.stats[type];
+            if (s) {
+                totalDist += s.total_distance;
+                totalDur += s.total_duration;
+                totalPts += s.total_points;
             }
         });
 
