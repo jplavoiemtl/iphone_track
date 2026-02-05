@@ -10,7 +10,7 @@ from lib.owntracks import fetch_owntracks_data
 from lib.activities import parse_activities, calculate_activity_stats
 
 app = Flask(__name__)
-app.secret_key = "iphone-tracker-local-session-key"
+app.secret_key = config.FLASK_SECRET_KEY
 
 # In-memory store for detection results (single-user local app)
 _detection_cache = {}
