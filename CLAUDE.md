@@ -70,16 +70,33 @@ Required environment variables:
 - Full deployment plan: `doc/Move_to_labpi_Implementation_Plan.md`
 - Original planning analysis: `doc/Move_iphone_track_to_labpi_Planning.md`
 
+### How the Docker image and bind mount work together
+The Docker image **does** contain a copy of the app code (the `COPY` steps in the
+Dockerfile copy `app.py`, `lib/`, `templates/`, `static/`, etc. into the image).
+However, the Portainer stack overrides that with a bind mount
+(`/home/pi/appjpl/iphone_track:/app`) which overlays the image's `/app` directory
+with the live source tree on the Pi.
+
+So at runtime, the container uses:
+- **From the image**: Python, pip packages (Flask, gunicorn, etc.)
+- **From the bind mount**: The actual app code on disk
+
+This is why code changes are live — gunicorn's `--reload` flag detects file changes
+in the mounted directory and restarts the worker automatically. For frontend changes
+(JS, CSS, HTML), a browser reload is needed since those are cached by the browser.
+
 ### Building the Docker image
-Only needed on first deploy or when `requirements.txt` changes:
+Only needed on first deploy or when `requirements.txt` changes (since pip packages
+live inside the image):
 ```bash
 cd /home/pi/appjpl/iphone_track && docker build -t iphone_track .
 ```
 
 ### Day-to-day development workflow
 1. Edit code in VS Code via Samba share (`\\labpi\appjpl\iphone_track`)
-2. Save — gunicorn `--reload` detects file changes and restarts workers automatically
-3. No rebuild, no container restart needed
+2. Save — gunicorn `--reload` detects file changes and restarts the worker automatically
+3. Reload the browser for frontend changes (JS, CSS, HTML)
+4. No rebuild, no container restart needed
 
 ## Planning & Documentation
 - All planning documents and implementation plans go in the `doc/` folder
