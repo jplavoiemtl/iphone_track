@@ -19,10 +19,10 @@ function initMap() {
 }
 
 function clearAllLayers() {
-    Object.keys(activityLayers).forEach(function(key) {
+    Object.keys(activityLayers).forEach(function (key) {
         var layer = activityLayers[key];
-        layer.paths.forEach(function(p) { p.setMap(null); });
-        layer.markers.forEach(function(m) { m.setMap(null); });
+        layer.paths.forEach(function (p) { p.setMap(null); });
+        layer.markers.forEach(function (m) { m.setMap(null); });
     });
     activityLayers = {};
     layerVisibility = {};
@@ -38,7 +38,7 @@ function addRichLayer(activityType, ridesData, layerStats) {
     var config = activityConfig[activityType] || activityConfig['all'];
     var layer = activityLayers[activityType];
 
-    ridesData.forEach(function(ride) {
+    ridesData.forEach(function (ride) {
         for (var i = 1; i < ride.points.length; i++) {
             var pathSegment = new google.maps.Polyline({
                 path: [
@@ -104,7 +104,7 @@ function addBasicLayer(activityType, points, stats, startTimeStr, endTimeStr) {
         var startInfo = new google.maps.InfoWindow({
             content: '<div style="font-size:12px;"><strong>' + config.name + ' Start</strong><br>' + startTimeStr + '</div>'
         });
-        startMarker.addListener('click', function() { startInfo.open(map, startMarker); });
+        startMarker.addListener('click', function () { startInfo.open(map, startMarker); });
         layer.markers.push(startMarker);
 
         var durationHours = Math.floor(stats.duration / 3600);
@@ -135,11 +135,11 @@ function addBasicLayer(activityType, points, stats, startTimeStr, endTimeStr) {
         });
 
         var endInfo = new google.maps.InfoWindow({ content: endContent });
-        endMarker.addListener('click', function() { endInfo.open(map, endMarker); });
+        endMarker.addListener('click', function () { endInfo.open(map, endMarker); });
         layer.markers.push(endMarker);
 
         var bounds = new google.maps.LatLngBounds();
-        points.forEach(function(p) { bounds.extend(new google.maps.LatLng(p.lat, p.lng)); });
+        points.forEach(function (p) { bounds.extend(new google.maps.LatLng(p.lat, p.lng)); });
         map.fitBounds(bounds);
     }
 
@@ -197,7 +197,7 @@ function addRideMarkers(activityType, ride, layer) {
     });
 
     var startInfoWindow = new google.maps.InfoWindow({ content: startContent });
-    startMarker.addListener('click', function() { startInfoWindow.open(map, startMarker); });
+    startMarker.addListener('click', function () { startInfoWindow.open(map, startMarker); });
     layer.markers.push(startMarker);
 
     var endMarker = new google.maps.Marker({
@@ -216,7 +216,7 @@ function addRideMarkers(activityType, ride, layer) {
     });
 
     var endInfoWindow = new google.maps.InfoWindow({ content: endContent });
-    endMarker.addListener('click', function() { endInfoWindow.open(map, endMarker); });
+    endMarker.addListener('click', function () { endInfoWindow.open(map, endMarker); });
     layer.markers.push(endMarker);
 }
 
@@ -225,8 +225,8 @@ function addRideMarkers(activityType, ride, layer) {
 // Higher = slower animation. Represents ms per GPS point.
 // The total animation time is capped at ANIMATION_MAX_TOTAL_MS.
 // ============================================================
-var ANIMATION_MS_PER_POINT = 100;
-var ANIMATION_MAX_TOTAL_MS = 30000;
+var ANIMATION_MS_PER_POINT = 200;
+var ANIMATION_MAX_TOTAL_MS = 60000;
 
 // Animation state
 var animationTimer = null;
@@ -528,7 +528,7 @@ function addRichLayerAnimated(activityType, ridesData, layerStats, onComplete) {
 
     // Flatten all segments across rides
     var segments = [];
-    ridesData.forEach(function(ride) {
+    ridesData.forEach(function (ride) {
         for (var i = 1; i < ride.points.length; i++) {
             segments.push({ ride: ride, idx: i });
         }
@@ -573,7 +573,7 @@ function addRichLayerAnimated(activityType, ridesData, layerStats, onComplete) {
         }
 
         if (animationCurrentIdx >= segments.length) {
-            ridesData.forEach(function(ride) {
+            ridesData.forEach(function (ride) {
                 addRideMarkers(activityType, ride, layer);
             });
             updateLayerControl();
@@ -630,7 +630,7 @@ function addBasicLayerAnimated(activityType, points, stats, startTimeStr, endTim
     var startInfo = new google.maps.InfoWindow({
         content: '<div style="font-size:12px;"><strong>' + config.name + ' Start</strong><br>' + startTimeStr + '</div>'
     });
-    startMarker.addListener('click', function() { startInfo.open(map, startMarker); });
+    startMarker.addListener('click', function () { startInfo.open(map, startMarker); });
     layer.markers.push(startMarker);
 
     var delayMs = _calcDelay(points.length);
@@ -688,7 +688,7 @@ function addBasicLayerAnimated(activityType, points, stats, startTimeStr, endTim
                 zIndex: 999
             });
             var endInfo = new google.maps.InfoWindow({ content: endContent });
-            endMarker.addListener('click', function() { endInfo.open(map, endMarker); });
+            endMarker.addListener('click', function () { endInfo.open(map, endMarker); });
             layer.markers.push(endMarker);
 
             updateLayerControl();
@@ -713,8 +713,8 @@ function addBasicLayerAnimated(activityType, points, stats, startTimeStr, endTim
 function fitBoundsToRides(ridesData) {
     if (ridesData.length > 0) {
         var bounds = new google.maps.LatLngBounds();
-        ridesData.forEach(function(ride) {
-            ride.points.forEach(function(point) {
+        ridesData.forEach(function (ride) {
+            ride.points.forEach(function (point) {
                 bounds.extend(new google.maps.LatLng(point.lat, point.lng));
             });
         });
@@ -730,8 +730,8 @@ function toggleLayer(activityType) {
     layer.visible = isVisible;
     layerVisibility[activityType] = isVisible;
 
-    layer.paths.forEach(function(path) { path.setMap(isVisible ? map : null); });
-    layer.markers.forEach(function(marker) { marker.setMap(isVisible ? map : null); });
+    layer.paths.forEach(function (path) { path.setMap(isVisible ? map : null); });
+    layer.markers.forEach(function (marker) { marker.setMap(isVisible ? map : null); });
 
     updateLayerControl();
 }
@@ -753,7 +753,7 @@ function updateLayerControl() {
 
     layerList.innerHTML = '';
 
-    Object.keys(activityLayers).forEach(function(activityType) {
+    Object.keys(activityLayers).forEach(function (activityType) {
         var layer = activityLayers[activityType];
         if (layer.paths.length > 0 || layer.markers.length > 0) {
             var config = activityConfig[activityType] || activityConfig['all'];
