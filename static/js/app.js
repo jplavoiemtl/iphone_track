@@ -676,8 +676,7 @@ function switchToDateTimeMode() {
     document.getElementById('datetime-panel').style.display = 'block';
     document.getElementById('live-panel').style.display = 'none';
 
-    // Hide live layer, show datetime layers
-    hideLiveLayer();
+    // Show datetime layers (live layer stays visible - user can toggle via layer control)
     showDatetimeLayers();
 }
 
@@ -694,9 +693,7 @@ function switchToLiveMode() {
     document.getElementById('datetime-panel').style.display = 'none';
     document.getElementById('live-panel').style.display = 'block';
 
-    // Hide datetime layers, show live layer
-    hideDatetimeLayers();
-    showLiveLayer();
+    // Layers stay visible - user can toggle via layer control
 
     // Check live status to see if there's an existing session
     checkLiveStatus();
