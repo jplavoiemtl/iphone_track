@@ -1,6 +1,12 @@
 var detectionData = null;
 var activeLayers = new Set();
 
+// Live mode state
+var currentMode = 'datetime';  // 'datetime' | 'live'
+var livePollingInterval = null;
+var liveData = null;
+var LIVE_POLL_INTERVAL_MS = 30000;  // 30 seconds
+
 document.addEventListener('DOMContentLoaded', function() {
     var startDateInput = document.getElementById('start-date');
     var endDateInput = document.getElementById('end-date');
@@ -18,6 +24,34 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('detect-btn').addEventListener('click', detectActivities);
     document.getElementById('start-tracking-btn').addEventListener('click', startTracking);
     document.getElementById('add-layers-btn').addEventListener('click', addSelectedLayers);
+
+    // Mode toggle handlers (with null checks for graceful degradation)
+    var modeDatetimeBtn = document.getElementById('mode-datetime');
+    var modeLiveBtn = document.getElementById('mode-live');
+    if (modeDatetimeBtn) {
+        modeDatetimeBtn.addEventListener('click', function() {
+            switchToDateTimeMode();
+        });
+    }
+    if (modeLiveBtn) {
+        modeLiveBtn.addEventListener('click', function() {
+            switchToLiveMode();
+        });
+    }
+
+    // Live mode button handlers
+    var liveStartBtn = document.getElementById('live-start-btn');
+    var liveResetBtn = document.getElementById('live-reset-btn');
+    if (liveStartBtn) {
+        liveStartBtn.addEventListener('click', function() {
+            startLiveMode();
+        });
+    }
+    if (liveResetBtn) {
+        liveResetBtn.addEventListener('click', function() {
+            resetLiveMode();
+        });
+    }
 
     // Sidebar toggle
     var sidebar = document.getElementById('sidebar');
@@ -439,5 +473,321 @@ function updateTrackingInfo() {
 
         var avgSpeed = totalDur > 0 ? (totalDist / totalDur * 3600) : 0;
         document.getElementById('stat-speed').textContent = avgSpeed.toFixed(1) + ' km/h';
+    }
+}
+
+// =============================================================================
+// Live Mode Functions
+// =============================================================================
+
+function switchToDateTimeMode() {
+    if (currentMode === 'datetime') return;
+
+    currentMode = 'datetime';
+    stopLivePolling();
+
+    // Update mode toggle buttons
+    document.getElementById('mode-datetime').classList.add('active');
+    document.getElementById('mode-live').classList.remove('active');
+
+    // Show datetime panel, hide live panel
+    document.getElementById('datetime-panel').style.display = 'block';
+    document.getElementById('live-panel').style.display = 'none';
+
+    // Hide live layer, show datetime layers
+    hideLiveLayer();
+    showDatetimeLayers();
+}
+
+function switchToLiveMode() {
+    if (currentMode === 'live') return;
+
+    currentMode = 'live';
+
+    // Update mode toggle buttons
+    document.getElementById('mode-live').classList.add('active');
+    document.getElementById('mode-datetime').classList.remove('active');
+
+    // Hide datetime panel, show live panel
+    document.getElementById('datetime-panel').style.display = 'none';
+    document.getElementById('live-panel').style.display = 'block';
+
+    // Hide datetime layers, show live layer
+    hideDatetimeLayers();
+    showLiveLayer();
+
+    // If we have live data cached, restore the display and resume polling
+    if (liveData && liveData.start_timestamp) {
+        updateLiveUI(liveData);
+        // Reload the track on map if not already visible
+        if (typeof livePolyline === 'undefined' || !livePolyline) {
+            loadLiveTrack();
+        }
+        // Resume polling
+        startLivePolling();
+    }
+}
+
+function hideDatetimeLayers() {
+    // Hide all non-live layers
+    if (typeof activityLayers !== 'undefined') {
+        Object.keys(activityLayers).forEach(function(key) {
+            if (key !== 'live') {
+                var layer = activityLayers[key];
+                layer.paths.forEach(function(p) { p.setMap(null); });
+                layer.markers.forEach(function(m) { m.setMap(null); });
+            }
+        });
+    }
+}
+
+function showDatetimeLayers() {
+    // Show all non-live layers that were previously visible
+    if (typeof activityLayers !== 'undefined') {
+        Object.keys(activityLayers).forEach(function(key) {
+            if (key !== 'live' && layerVisibility[key]) {
+                var layer = activityLayers[key];
+                layer.paths.forEach(function(p) { p.setMap(map); });
+                layer.markers.forEach(function(m) { m.setMap(map); });
+            }
+        });
+    }
+}
+
+function hideLiveLayer() {
+    if (typeof livePolyline !== 'undefined' && livePolyline) {
+        livePolyline.setMap(null);
+    }
+}
+
+function showLiveLayer() {
+    if (typeof livePolyline !== 'undefined' && livePolyline) {
+        livePolyline.setMap(map);
+    }
+}
+
+function startLiveMode() {
+    var startBtn = document.getElementById('live-start-btn');
+    startBtn.disabled = true;
+    startBtn.textContent = 'Starting...';
+
+    fetch('/api/live/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Live Mode';
+
+        if (!data.success) {
+            alert('Failed to start live mode: ' + data.error);
+            return;
+        }
+
+        liveData = data;
+        updateLiveUI(data);
+
+        // Show reset button, hide start button
+        startBtn.style.display = 'none';
+        document.getElementById('live-reset-btn').style.display = 'block';
+
+        // Start polling
+        startLivePolling();
+    })
+    .catch(function(err) {
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Live Mode';
+        alert('Failed to start live mode: ' + err.message);
+    });
+}
+
+function startLivePolling() {
+    if (livePollingInterval) return;  // Already polling
+
+    updateLiveIndicator(true);
+    livePollingInterval = setInterval(pollLiveData, LIVE_POLL_INTERVAL_MS);
+
+    // Also poll immediately
+    pollLiveData();
+}
+
+function stopLivePolling() {
+    if (livePollingInterval) {
+        clearInterval(livePollingInterval);
+        livePollingInterval = null;
+    }
+    updateLiveIndicator(false);
+}
+
+function pollLiveData() {
+    fetch('/api/live/poll', { method: 'POST' })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (!data.success) {
+            console.error('Poll failed:', data.error);
+            return;
+        }
+
+        // Update cached data
+        liveData = Object.assign(liveData || {}, data);
+        updateLiveUI(data);
+
+        // Update last poll time
+        var now = new Date();
+        document.getElementById('live-last-update').textContent = now.toLocaleTimeString();
+
+        // If we got new points, update the map
+        if (data.new_points && data.new_points.length > 0) {
+            appendLivePoints(data.new_points);
+        }
+    })
+    .catch(function(err) {
+        console.error('Poll error:', err.message);
+    });
+}
+
+function resetLiveMode() {
+    if (!confirm('Reset live mode? This will clear all accumulated data and start fresh from now.')) {
+        return;
+    }
+
+    stopLivePolling();
+    clearAllLayers();
+
+    var resetBtn = document.getElementById('live-reset-btn');
+    resetBtn.disabled = true;
+    resetBtn.textContent = 'Resetting...';
+
+    fetch('/api/live/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        resetBtn.disabled = false;
+        resetBtn.textContent = 'Reset to Now';
+
+        if (!data.success) {
+            alert('Failed to reset: ' + data.error);
+            return;
+        }
+
+        liveData = data;
+        updateLiveUI(data);
+        startLivePolling();
+    })
+    .catch(function(err) {
+        resetBtn.disabled = false;
+        resetBtn.textContent = 'Reset to Now';
+        alert('Failed to reset: ' + err.message);
+    });
+}
+
+function updateLiveUI(data) {
+    // Update start time
+    if (data.start_time_str) {
+        document.getElementById('live-start-time').textContent = data.start_time_str;
+    }
+
+    // Update session duration
+    if (data.start_timestamp) {
+        var now = Math.floor(Date.now() / 1000);
+        var duration = now - data.start_timestamp;
+        var hours = Math.floor(duration / 3600);
+        var mins = Math.floor((duration % 3600) / 60);
+        document.getElementById('live-duration').textContent = '(' + hours + 'h ' + mins + 'm ago)';
+    }
+
+    // Update total points
+    document.getElementById('live-total-points').textContent = (data.total_points || 0).toLocaleString();
+
+    // Update activity stats
+    if (data.stats && Object.keys(data.stats).length > 0) {
+        var statsContent = document.getElementById('live-stats-content');
+        var html = '';
+        var icons = { car: 'Car', bike: 'Bike', other: 'Other' };
+
+        ['car', 'bike', 'other'].forEach(function(type) {
+            var s = data.stats[type];
+            if (s && s.total_points > 0) {
+                html += '<div>' + icons[type] + ': ' +
+                        '<span class="stat-value">' + s.count + ' rides, ' +
+                        s.total_distance + ' km</span></div>';
+            }
+        });
+
+        if (html) {
+            statsContent.innerHTML = html;
+            document.getElementById('live-activity-summary').style.display = 'block';
+        }
+    }
+}
+
+function updateLiveIndicator(active) {
+    var indicator = document.getElementById('live-indicator');
+    var statusText = document.getElementById('live-status-text');
+
+    if (active) {
+        indicator.classList.add('active');
+        statusText.classList.add('active');
+        statusText.textContent = 'Live';
+    } else {
+        indicator.classList.remove('active');
+        statusText.classList.remove('active');
+        statusText.textContent = 'Stopped';
+    }
+}
+
+function loadLiveTrack() {
+    fetch('/api/live/track/all')
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (!data.success) {
+            console.log('No live track data yet');
+            return;
+        }
+
+        if (data.points && data.points.length > 0) {
+            drawLiveTrackInstant(data.points);
+        }
+    })
+    .catch(function(err) {
+        console.error('Failed to load live track:', err.message);
+    });
+}
+
+function drawLiveTrackInstant(points) {
+    // Use map.js functions to draw track
+    if (typeof initLiveLayer === 'function') {
+        initLiveLayer();
+        for (var i = 0; i < points.length; i++) {
+            appendLivePoint(points[i]);
+        }
+        fitMapToLivePoints(points);
+    } else {
+        // Fallback - draw using basic layer
+        addBasicLayer('live', points, {}, '', '');
+    }
+}
+
+function appendLivePoints(newPoints) {
+    // Append new points to map
+    if (typeof appendLivePoint === 'function') {
+        for (var i = 0; i < newPoints.length; i++) {
+            appendLivePoint(newPoints[i]);
+        }
+        // Pan to latest point
+        if (newPoints.length > 0) {
+            var last = newPoints[newPoints.length - 1];
+            if (typeof map !== 'undefined' && map) {
+                map.panTo({ lat: last.lat, lng: last.lng });
+            }
+        }
+    } else {
+        // Fallback - reload entire track
+        loadLiveTrack();
     }
 }

@@ -26,6 +26,14 @@ function clearAllLayers() {
     });
     activityLayers = {};
     layerVisibility = {};
+
+    // Also clear live layer polyline
+    if (livePolyline) {
+        livePolyline.setMap(null);
+        livePolyline = null;
+        livePolylinePath = null;
+    }
+
     updateLayerControl();
 }
 
@@ -768,5 +776,78 @@ function updateLayerControl() {
                 (isVisible ? 'Hide' : 'Show') + '</button>';
             layerList.appendChild(item);
         }
+    });
+}
+
+// =============================================================================
+// Live Mode Layer Functions
+// =============================================================================
+
+var livePolyline = null;
+var livePolylinePath = null;
+var liveLayerConfig = { color: '#4285F4', icon: '\u{1F4CD}', name: 'Live' };
+
+function initLiveLayer() {
+    // Create a single polyline for live mode that we can append to
+    if (livePolyline) {
+        // Already initialized
+        return;
+    }
+
+    livePolylinePath = new google.maps.MVCArray();
+    livePolyline = new google.maps.Polyline({
+        path: livePolylinePath,
+        strokeColor: liveLayerConfig.color,
+        strokeWeight: 4,
+        strokeOpacity: 0.8,
+        map: map
+    });
+
+    if (!activityLayers['live']) {
+        activityLayers['live'] = { paths: [livePolyline], markers: [], visible: true };
+        layerVisibility['live'] = true;
+    }
+
+    // Add live config to activityConfig if not present
+    if (!activityConfig['live']) {
+        activityConfig['live'] = liveLayerConfig;
+    }
+}
+
+function appendLivePoint(point) {
+    if (!livePolyline) {
+        initLiveLayer();
+    }
+
+    var latLng = new google.maps.LatLng(point.lat, point.lng);
+    livePolylinePath.push(latLng);
+}
+
+function clearLiveLayer() {
+    if (livePolyline) {
+        livePolyline.setMap(null);
+        livePolyline = null;
+        livePolylinePath = null;
+    }
+    if (activityLayers['live']) {
+        delete activityLayers['live'];
+    }
+    if (layerVisibility['live']) {
+        delete layerVisibility['live'];
+    }
+}
+
+function fitMapToLivePoints(points) {
+    if (!points || points.length === 0) return;
+
+    var bounds = new google.maps.LatLngBounds();
+    points.forEach(function(p) {
+        bounds.extend({ lat: p.lat, lng: p.lng });
+    });
+    map.fitBounds(bounds);
+
+    // Don't zoom in too close
+    google.maps.event.addListenerOnce(map, 'bounds_changed', function() {
+        if (map.getZoom() > 16) map.setZoom(16);
     });
 }

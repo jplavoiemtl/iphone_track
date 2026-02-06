@@ -411,6 +411,162 @@ body {
     display: none;
 }
 
+/* Sidebar Header - sticky at top */
+.sidebar-header {
+    position: sticky;
+    top: -15px;
+    z-index: 100;
+    background-color: #16213e;
+    margin: -15px -15px 12px -15px;
+    padding: 15px 15px 12px 15px;
+}
+
+.sidebar-header h1 {
+    margin-bottom: 12px;
+}
+
+/* Mode Toggle */
+.mode-toggle {
+    display: flex;
+    gap: 0;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #0f3460;
+}
+
+.mode-btn {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    background-color: #1a1a2e;
+    color: #a0a0b8;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.mode-btn:hover {
+    background-color: #0f3460;
+}
+
+.mode-btn.active {
+    background-color: #e94560;
+    color: white;
+}
+
+/* Live Panel */
+#live-panel {
+    background-color: #1a1a2e;
+}
+
+.live-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #0f3460;
+}
+
+.indicator-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #666;
+    transition: background-color 0.3s;
+}
+
+.indicator-dot.active {
+    background-color: #53cf6e;
+    box-shadow: 0 0 8px #53cf6e;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+#live-status-text {
+    font-size: 13px;
+    font-weight: bold;
+    color: #a0a0b8;
+}
+
+#live-status-text.active {
+    color: #53cf6e;
+}
+
+#live-last-update {
+    font-size: 11px;
+    color: #666;
+    margin-left: auto;
+}
+
+.live-session-start {
+    background-color: #0d1b2a;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.session-label {
+    font-size: 10px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.session-time {
+    font-size: 16px;
+    font-weight: bold;
+    color: #e94560;
+}
+
+.session-duration {
+    font-size: 12px;
+    color: #a0a0b8;
+    margin-top: 4px;
+}
+
+.live-info {
+    font-size: 13px;
+    color: #b0b0c8;
+    margin-bottom: 12px;
+}
+
+.live-info span {
+    color: #53cf6e;
+    font-weight: bold;
+}
+
+.live-controls {
+    margin-bottom: 8px;
+}
+
+.live-stats-content {
+    font-size: 12px;
+    color: #b0b0c8;
+    background-color: #0d1b2a;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #0f3460;
+}
+
+.live-stats-content div {
+    padding: 2px 0;
+}
+
+.live-stats-content .stat-value {
+    color: #53cf6e;
+    font-weight: 600;
+}
+
 /* ============================
    Mobile / Responsive
    ============================ */
