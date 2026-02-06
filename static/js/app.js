@@ -481,6 +481,187 @@ function updateTrackingInfo() {
 // Live Mode Functions
 // =============================================================================
 
+var STALE_SESSION_THRESHOLD_DAYS = 7;
+
+function checkLiveStatus() {
+    // Check if there's an existing live session
+    fetch('/api/live/status')
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (!data.success) {
+            console.error('Failed to check live status:', data.error);
+            showStartLiveButton();
+            return;
+        }
+
+        if (!data.has_session) {
+            // No existing session - show Start button
+            showStartLiveButton();
+            return;
+        }
+
+        // Session exists - update UI with session info
+        updateLiveStartTime(data.start_time_str, data.start_timestamp);
+
+        if (data.is_active) {
+            // Session is active in memory (another device or same device)
+            // Join the session
+            joinLiveSession();
+        } else if (data.is_stale) {
+            // Session is > 7 days old - prompt user
+            showStaleSessionDialog(data);
+        } else {
+            // Recent session but not active (container restarted)
+            // Offer to resume
+            showResumeSessionDialog(data);
+        }
+    })
+    .catch(function(err) {
+        console.error('Failed to check live status:', err.message);
+        showStartLiveButton();
+    });
+}
+
+function showStartLiveButton() {
+    document.getElementById('live-start-btn').style.display = 'block';
+    document.getElementById('live-start-btn').textContent = 'Start Live Mode';
+    document.getElementById('live-reset-btn').style.display = 'none';
+    document.getElementById('live-start-time').textContent = '--';
+    document.getElementById('live-duration').textContent = '';
+    document.getElementById('live-total-points').textContent = '0';
+    document.getElementById('live-activity-summary').style.display = 'none';
+    updateLiveIndicator(false);
+}
+
+function updateLiveStartTime(startTimeStr, startTimestamp) {
+    document.getElementById('live-start-time').textContent = startTimeStr;
+    if (startTimestamp) {
+        var now = Math.floor(Date.now() / 1000);
+        var duration = now - startTimestamp;
+        var hours = Math.floor(duration / 3600);
+        var mins = Math.floor((duration % 3600) / 60);
+        document.getElementById('live-duration').textContent = '(' + hours + 'h ' + mins + 'm ago)';
+    }
+}
+
+function showStaleSessionDialog(statusData) {
+    var message = 'Live mode session is ' + statusData.age_days + ' days old.\n' +
+                  'Started: ' + statusData.start_time_str + '\n\n' +
+                  'Do you want to:\n' +
+                  '- Resume from where you left off?\n' +
+                  '- Or reset and start fresh from now?\n\n' +
+                  'Click OK to Reset, Cancel to Resume';
+
+    if (confirm(message)) {
+        // Reset - start fresh
+        startLiveMode();
+    } else {
+        // Resume from saved state
+        resumeLiveSession();
+    }
+}
+
+function showResumeSessionDialog(statusData) {
+    var message = 'Found existing live mode session.\n' +
+                  'Started: ' + statusData.start_time_str + '\n' +
+                  'Points: ' + statusData.total_points + '\n\n' +
+                  'Resume this session?\n\n' +
+                  'Click OK to Resume, Cancel to Start Fresh';
+
+    if (confirm(message)) {
+        // Resume from saved state
+        resumeLiveSession();
+    } else {
+        // Start fresh
+        startLiveMode();
+    }
+}
+
+function joinLiveSession() {
+    // Join an active session (another device is already tracking)
+    var startBtn = document.getElementById('live-start-btn');
+    startBtn.style.display = 'none';
+    document.getElementById('live-reset-btn').style.display = 'block';
+
+    // Call start which will return the existing session
+    fetch('/api/live/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (!data.success) {
+            alert('Failed to join live session: ' + data.error);
+            showStartLiveButton();
+            return;
+        }
+
+        liveData = data;
+        updateLiveUI(data);
+
+        // Load existing track on map
+        if (data.total_points > 0) {
+            loadLiveTrack();
+        }
+
+        // Start polling
+        startLivePolling();
+    })
+    .catch(function(err) {
+        alert('Failed to join live session: ' + err.message);
+        showStartLiveButton();
+    });
+}
+
+function resumeLiveSession() {
+    // Resume from saved state after container restart
+    var startBtn = document.getElementById('live-start-btn');
+    startBtn.disabled = true;
+    startBtn.textContent = 'Resuming...';
+
+    // Reset lastDrawnTimestamp - we'll draw all points from the loaded data
+    lastDrawnTimestamp = 0;
+
+    fetch('/api/live/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resume: true })
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Live Mode';
+
+        if (!data.success) {
+            alert('Failed to resume live session: ' + data.error);
+            showStartLiveButton();
+            return;
+        }
+
+        liveData = data;
+        updateLiveUI(data);
+
+        // Show reset button, hide start button
+        startBtn.style.display = 'none';
+        document.getElementById('live-reset-btn').style.display = 'block';
+
+        // Load existing track on map
+        if (data.total_points > 0) {
+            loadLiveTrack();
+        }
+
+        // Start polling
+        startLivePolling();
+    })
+    .catch(function(err) {
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Live Mode';
+        alert('Failed to resume live session: ' + err.message);
+        showStartLiveButton();
+    });
+}
+
 function switchToDateTimeMode() {
     if (currentMode === 'datetime') return;
 
@@ -517,16 +698,8 @@ function switchToLiveMode() {
     hideDatetimeLayers();
     showLiveLayer();
 
-    // If we have live data cached, restore the display and resume polling
-    if (liveData && liveData.start_timestamp) {
-        updateLiveUI(liveData);
-        // Reload the track on map if not already visible
-        if (typeof livePolyline === 'undefined' || !livePolyline) {
-            loadLiveTrack();
-        }
-        // Resume polling
-        startLivePolling();
-    }
+    // Check live status to see if there's an existing session
+    checkLiveStatus();
 }
 
 function hideDatetimeLayers() {
@@ -572,6 +745,11 @@ function startLiveMode() {
     startBtn.disabled = true;
     startBtn.textContent = 'Starting...';
 
+    // Clear any existing live layer for fresh start
+    if (typeof clearLiveLayer === 'function') {
+        clearLiveLayer();
+    }
+
     // Reset last drawn timestamp for fresh start
     lastDrawnTimestamp = 0;
 
@@ -592,6 +770,9 @@ function startLiveMode() {
 
         liveData = data;
         updateLiveUI(data);
+
+        // Clear activity summary since we're starting fresh
+        document.getElementById('live-activity-summary').style.display = 'none';
 
         // Show reset button, hide start button
         startBtn.style.display = 'none';
@@ -665,7 +846,12 @@ function resetLiveMode() {
     }
 
     stopLivePolling();
-    clearAllLayers();
+
+    // Clear just the live layer, not datetime layers
+    if (typeof clearLiveLayer === 'function') {
+        clearLiveLayer();
+    }
+
     lastDrawnTimestamp = 0;  // Reset for fresh start
 
     var resetBtn = document.getElementById('live-reset-btn');
@@ -689,6 +875,10 @@ function resetLiveMode() {
 
         liveData = data;
         updateLiveUI(data);
+
+        // Clear activity summary since we're starting fresh
+        document.getElementById('live-activity-summary').style.display = 'none';
+
         startLivePolling();
     })
     .catch(function(err) {
@@ -764,6 +954,8 @@ function loadLiveTrack() {
 
         if (data.points && data.points.length > 0) {
             drawLiveTrackInstant(data.points);
+            // Update lastDrawnTimestamp to the last point
+            lastDrawnTimestamp = data.points[data.points.length - 1].tst;
         }
     })
     .catch(function(err) {

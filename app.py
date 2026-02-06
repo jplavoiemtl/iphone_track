@@ -650,16 +650,106 @@ def _generate_saved_map_html(saved_layers_data, saved_rides_data, date_range, ac
 
 @app.route("/api/live/start", methods=["POST"])
 def live_start():
-    """Initialize live mode with a fresh start.
+    """Initialize or resume live mode.
 
-    Sets start_timestamp to current time and begins tracking.
-    Phase 1: Fresh start only (no resume).
+    Behavior:
+    - If session is already active in memory: return existing session (join)
+    - If resume=true and saved state exists: restore from saved state
+    - Otherwise: fresh start from now
     """
     global _live_cache
 
+    data = request.get_json() or {}
+    resume = data.get('resume', False)
+
     now = int(time.time())
 
-    # Use default timezone initially - will detect from first GPS point
+    # Check if session is already active in memory (another device joined)
+    if _live_cache.get('is_active') and _live_cache.get('start_timestamp'):
+        # Return existing session for joining device
+        detected_tz = _live_cache.get('detected_tz') or pytz.timezone(config.DEFAULT_TIMEZONE)
+        start_dt = datetime.fromtimestamp(_live_cache['start_timestamp'], tz=pytz.UTC).astimezone(detected_tz)
+
+        # Format stats for response
+        stats_response = _format_activity_stats(_live_cache.get('activity_stats', {}))
+
+        return jsonify({
+            "success": True,
+            "mode": "joined",
+            "start_timestamp": _live_cache['start_timestamp'],
+            "start_time_str": start_dt.strftime('%Y-%m-%d %H:%M:%S'),
+            "timezone": detected_tz.zone,
+            "total_points": len(_live_cache.get('gps_points', [])),
+            "stats": stats_response
+        })
+
+    # Check for saved state to resume
+    saved_state = load_live_state()
+
+    if resume and saved_state:
+        # Resume from saved state - fetch all data from start to now
+        start_timestamp = saved_state['start_timestamp']
+        tz_name = saved_state.get('timezone', config.DEFAULT_TIMEZONE)
+        detected_tz = pytz.timezone(tz_name)
+
+        # Fetch all data from start_timestamp to now
+        from_dt = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
+        to_dt = datetime.fromtimestamp(now, tz=pytz.UTC).astimezone(detected_tz)
+
+        raw_data = fetch_owntracks_data(
+            from_dt.strftime('%Y-%m-%d'),
+            to_dt.strftime('%Y-%m-%d'),
+            from_dt.strftime('%H:%M'),
+            to_dt.strftime('%H:%M'),
+            server_ip=config.OWNTRACKS_SERVER_IP,
+            server_port=config.OWNTRACKS_SERVER_PORT,
+            user=config.OWNTRACKS_USER,
+            device_id=config.OWNTRACKS_DEVICE_ID,
+            target_timezone=detected_tz,
+            default_timezone=config.DEFAULT_TIMEZONE
+        )
+
+        if raw_data:
+            # Update timezone from first GPS point if available
+            first_gps = next((item for item in raw_data if item.get("_type") == "location"), None)
+            if first_gps:
+                detected_tz = get_timezone_from_gps(first_gps['lat'], first_gps['lon'])
+                tz_name = detected_tz.zone
+
+            gps_points, activities = parse_activities(raw_data)
+            activity_stats = calculate_activity_stats(activities) if activities else {}
+        else:
+            raw_data = []
+            gps_points = []
+            activities = {}
+            activity_stats = {}
+
+        # Initialize live cache with restored data
+        _live_cache = {
+            'is_active': True,
+            'start_timestamp': start_timestamp,
+            'last_poll_timestamp': now,
+            'detected_tz': detected_tz,
+            'gps_points': gps_points,
+            'activities': activities,
+            'activity_stats': activity_stats,
+            'raw_data': raw_data
+        }
+
+        start_dt = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
+        stats_response = _format_activity_stats(activity_stats)
+
+        return jsonify({
+            "success": True,
+            "mode": "resumed",
+            "start_timestamp": start_timestamp,
+            "start_time_str": start_dt.strftime('%Y-%m-%d %H:%M:%S'),
+            "timezone": tz_name,
+            "total_points": len(gps_points),
+            "stats": stats_response
+        })
+
+    # Fresh start
     default_tz = pytz.timezone(config.DEFAULT_TIMEZONE)
     tz_name = default_tz.zone
 
@@ -689,6 +779,23 @@ def live_start():
         "total_points": 0,
         "stats": {}
     })
+
+
+def _format_activity_stats(activity_stats):
+    """Format activity stats for JSON response."""
+    stats_response = {}
+    for activity_type in ['car', 'bike', 'other']:
+        if activity_type in activity_stats:
+            s = activity_stats[activity_type]
+            stats_response[activity_type] = {
+                'count': s['count'],
+                'total_distance': round(s['total_distance'], 2),
+                'total_duration': s['total_duration'],
+                'total_duration_str': format_time(s['total_duration']),
+                'total_points': s['total_points'],
+                'avg_speed': round((s['total_distance'] / s['total_duration'] * 3600), 1) if s['total_duration'] > 0 else 0
+            }
+    return stats_response
 
 
 @app.route("/api/live/poll", methods=["POST"])
@@ -762,18 +869,7 @@ def live_poll():
     _live_cache['last_poll_timestamp'] = now
 
     # Format stats for response
-    stats_response = {}
-    for activity_type in ['car', 'bike', 'other']:
-        if activity_type in activity_stats:
-            s = activity_stats[activity_type]
-            stats_response[activity_type] = {
-                'count': s['count'],
-                'total_distance': round(s['total_distance'], 2),
-                'total_duration': s['total_duration'],
-                'total_duration_str': format_time(s['total_duration']),
-                'total_points': s['total_points'],
-                'avg_speed': round((s['total_distance'] / s['total_duration'] * 3600), 1) if s['total_duration'] > 0 else 0
-            }
+    stats_response = _format_activity_stats(activity_stats)
 
     # Format new points for frontend (legacy, kept for debugging)
     new_points_response = [
@@ -916,6 +1012,56 @@ def live_stop():
     global _live_cache
     _live_cache['is_active'] = False
     return jsonify({"success": True})
+
+
+@app.route("/api/live/status")
+def live_status():
+    """Get current live mode status without fetching data.
+
+    Used by frontend to check if a session exists and how old it is
+    before deciding to resume or reset.
+    """
+    # Check for persisted state first (survives container restart)
+    saved_state = load_live_state()
+
+    if not saved_state:
+        return jsonify({
+            "success": True,
+            "has_session": False
+        })
+
+    start_timestamp = saved_state.get('start_timestamp')
+    tz_name = saved_state.get('timezone', config.DEFAULT_TIMEZONE)
+
+    # Calculate session age
+    now = int(time.time())
+    age_seconds = now - start_timestamp
+    age_days = age_seconds / 86400  # seconds per day
+
+    # Session is stale if > 7 days old
+    STALE_THRESHOLD_DAYS = 7
+    is_stale = age_days > STALE_THRESHOLD_DAYS
+
+    # Format start time for display
+    tz = pytz.timezone(tz_name)
+    start_dt = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(tz)
+
+    # Check if session is currently active in memory
+    is_active = _live_cache.get('is_active', False)
+    total_points = len(_live_cache.get('gps_points', []))
+
+    return jsonify({
+        "success": True,
+        "has_session": True,
+        "start_timestamp": start_timestamp,
+        "start_time_str": start_dt.strftime('%Y-%m-%d %H:%M:%S'),
+        "timezone": tz_name,
+        "age_seconds": age_seconds,
+        "age_days": round(age_days, 1),
+        "is_stale": is_stale,
+        "is_active": is_active,
+        "total_points": total_points
+    })
 
 
 def _build_timeline(gps_points, activities, lwt_markers, detected_tz):
