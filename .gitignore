@@ -20,6 +20,7 @@ doc/
 
 # Data files
 GPS_activity_markers.json
+live_mode_state.json
 
 # IDE
 .vscode/
