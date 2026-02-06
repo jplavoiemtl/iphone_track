@@ -653,6 +653,7 @@ def live_start():
     """Initialize or resume live mode.
 
     Behavior:
+    - If reset=true: force fresh start (clear existing session)
     - If session is already active in memory: return existing session (join)
     - If resume=true and saved state exists: restore from saved state
     - Otherwise: fresh start from now
@@ -661,11 +662,17 @@ def live_start():
 
     data = request.get_json() or {}
     resume = data.get('resume', False)
+    reset = data.get('reset', False)
 
     now = int(time.time())
 
+    # If reset requested, skip the join logic and force fresh start
+    if reset:
+        # Clear existing cache and fall through to fresh start
+        _reset_live_cache()
+
     # Check if session is already active in memory (another device joined)
-    if _live_cache.get('is_active') and _live_cache.get('start_timestamp'):
+    elif _live_cache.get('is_active') and _live_cache.get('start_timestamp'):
         # Return existing session for joining device
         detected_tz = _live_cache.get('detected_tz') or pytz.timezone(config.DEFAULT_TIMEZONE)
         start_dt = datetime.fromtimestamp(_live_cache['start_timestamp'], tz=pytz.UTC).astimezone(detected_tz)

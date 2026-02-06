@@ -861,7 +861,7 @@ function resetLiveMode() {
     fetch('/api/live/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ reset: true })
     })
     .then(function(response) { return response.json(); })
     .then(function(data) {
