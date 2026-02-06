@@ -812,6 +812,9 @@ function initLiveLayer() {
     if (!activityConfig['live']) {
         activityConfig['live'] = liveLayerConfig;
     }
+
+    // Update layer control to show the new Live layer
+    updateLayerControl();
 }
 
 function appendLivePoint(point) {
