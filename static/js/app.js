@@ -6,6 +6,7 @@ var currentMode = 'datetime';  // 'datetime' | 'live'
 var livePollingInterval = null;
 var liveData = null;
 var LIVE_POLL_INTERVAL_MS = 30000;  // 30 seconds
+var lastDrawnTimestamp = 0;  // Track last point drawn to avoid missing any
 
 document.addEventListener('DOMContentLoaded', function() {
     var startDateInput = document.getElementById('start-date');
@@ -571,6 +572,9 @@ function startLiveMode() {
     startBtn.disabled = true;
     startBtn.textContent = 'Starting...';
 
+    // Reset last drawn timestamp for fresh start
+    lastDrawnTimestamp = 0;
+
     fetch('/api/live/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -622,7 +626,11 @@ function stopLivePolling() {
 }
 
 function pollLiveData() {
-    fetch('/api/live/poll', { method: 'POST' })
+    fetch('/api/live/poll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ last_drawn_timestamp: lastDrawnTimestamp })
+    })
     .then(function(response) { return response.json(); })
     .then(function(data) {
         if (!data.success) {
@@ -638,9 +646,12 @@ function pollLiveData() {
         var now = new Date();
         document.getElementById('live-last-update').textContent = now.toLocaleTimeString();
 
-        // If we got new points, update the map
-        if (data.new_points && data.new_points.length > 0) {
-            appendLivePoints(data.new_points);
+        // Draw points we haven't drawn yet (based on points_to_draw from backend)
+        if (data.points_to_draw && data.points_to_draw.length > 0) {
+            appendLivePoints(data.points_to_draw);
+            // Update lastDrawnTimestamp to the last point we drew
+            var lastPoint = data.points_to_draw[data.points_to_draw.length - 1];
+            lastDrawnTimestamp = lastPoint.tst;
         }
     })
     .catch(function(err) {
@@ -655,6 +666,7 @@ function resetLiveMode() {
 
     stopLivePolling();
     clearAllLayers();
+    lastDrawnTimestamp = 0;  // Reset for fresh start
 
     var resetBtn = document.getElementById('live-reset-btn');
     resetBtn.disabled = true;
@@ -767,6 +779,10 @@ function drawLiveTrackInstant(points) {
             appendLivePoint(points[i]);
         }
         fitMapToLivePoints(points);
+        // Update lastDrawnTimestamp to the last point
+        if (points.length > 0) {
+            lastDrawnTimestamp = points[points.length - 1].tst;
+        }
     } else {
         // Fallback - draw using basic layer
         addBasicLayer('live', points, {}, '', '');

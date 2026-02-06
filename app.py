@@ -702,6 +702,10 @@ def live_poll():
     if not _live_cache.get('is_active'):
         return jsonify({"success": False, "error": "Live mode not active"}), 400
 
+    # Get last_drawn_timestamp from frontend (to know what to send for drawing)
+    data = request.get_json() or {}
+    last_drawn_timestamp = data.get('last_drawn_timestamp', 0)
+
     now = int(time.time())
     last_poll = _live_cache.get('last_poll_timestamp', now)
     detected_tz = _live_cache.get('detected_tz')
@@ -771,16 +775,26 @@ def live_poll():
                 'avg_speed': round((s['total_distance'] / s['total_duration'] * 3600), 1) if s['total_duration'] > 0 else 0
             }
 
-    # Format new points for frontend
+    # Format new points for frontend (legacy, kept for debugging)
     new_points_response = [
         {"lat": p["lat"], "lng": p["lon"], "tst": p["tst"]}
         for p in new_points
+    ]
+
+    # Get all points to draw (points after last_drawn_timestamp)
+    # This ensures no points are missed due to timing issues
+    points_to_draw = [
+        {"lat": p["lat"], "lng": p["lon"], "tst": p["tst"]}
+        for p in gps_points
+        if p["tst"] > last_drawn_timestamp
     ]
 
     return jsonify({
         "success": True,
         "new_points": new_points_response,
         "new_points_count": len(new_points),
+        "points_to_draw": points_to_draw,
+        "points_to_draw_count": len(points_to_draw),
         "total_points": len(gps_points),
         "stats": stats_response,
         "last_poll_timestamp": now
