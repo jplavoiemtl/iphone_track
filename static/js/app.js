@@ -9,7 +9,7 @@ var LIVE_POLL_INTERVAL_MS = 30000;  // 30 seconds
 var lastDrawnTimestamp = 0;  // Track last point drawn to avoid missing any
 
 // Live mode ride tracking - to detect when to redraw rich layers
-var liveRideCounts = { car: 0, bike: 0 };
+var liveRideCounts = { car: 0, bike: 0, other: 0 };
 
 // Track if live animation was already shown this session (for hybrid animation)
 var liveAnimationShown = false;
@@ -594,7 +594,7 @@ function joinLiveSession() {
 
     // Reset state for fresh draw
     lastDrawnTimestamp = 0;
-    liveRideCounts = { car: 0, bike: 0 };
+    liveRideCounts = { car: 0, bike: 0, other: 0 };
 
     // Call start which will return the existing session
     fetch('/api/live/start', {
@@ -646,7 +646,7 @@ function resumeLiveSession() {
 
     // Reset state - we'll draw all points from the loaded data
     lastDrawnTimestamp = 0;
-    liveRideCounts = { car: 0, bike: 0 };
+    liveRideCounts = { car: 0, bike: 0, other: 0 };
 
     fetch('/api/live/start', {
         method: 'POST',
@@ -799,7 +799,7 @@ function startLiveMode() {
 
     // Reset state for fresh start
     lastDrawnTimestamp = 0;
-    liveRideCounts = { car: 0, bike: 0 };
+    liveRideCounts = { car: 0, bike: 0, other: 0 };
     liveAnimationShown = false;  // Reset so next entry will animate
 
     // Hide tracking info until we have data
@@ -883,12 +883,16 @@ function pollLiveData() {
         // Check if ride counts changed - need to redraw rich layers
         var newCarCount = (data.stats && data.stats.car) ? data.stats.car.count : 0;
         var newBikeCount = (data.stats && data.stats.bike) ? data.stats.bike.count : 0;
-        var ridesChanged = (newCarCount !== liveRideCounts.car) || (newBikeCount !== liveRideCounts.bike);
+        var newOtherCount = (data.stats && data.stats.other) ? data.stats.other.count : 0;
+        var ridesChanged = (newCarCount !== liveRideCounts.car) ||
+                           (newBikeCount !== liveRideCounts.bike) ||
+                           (newOtherCount !== liveRideCounts.other);
 
         if (ridesChanged) {
             // Update counts
             liveRideCounts.car = newCarCount;
             liveRideCounts.bike = newBikeCount;
+            liveRideCounts.other = newOtherCount;
             // Fetch and redraw rich layers for activities
             refreshLiveActivityLayers();
         }
@@ -908,7 +912,7 @@ function pollLiveData() {
 }
 
 function refreshLiveActivityLayers() {
-    // Fetch and draw rich layers for car and bike activities
+    // Fetch and draw rich layers for car, bike, and other activities
     // This gives us markers and colored rides like datetime mode
 
     // Fetch car rides if any
@@ -942,6 +946,22 @@ function refreshLiveActivityLayers() {
             console.error('Failed to fetch bike rides:', err.message);
         });
     }
+
+    // Fetch other (walking) rides if any
+    if (liveRideCounts.other > 0) {
+        fetch('/api/live/track/other')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.success && data.rides && data.rides.length > 0) {
+                // Clear existing other layer before redrawing
+                clearActivityLayer('other');
+                addRichLayer('other', data.rides, data.stats);
+            }
+        })
+        .catch(function(err) {
+            console.error('Failed to fetch other rides:', err.message);
+        });
+    }
 }
 
 function resetLiveMode() {
@@ -962,7 +982,7 @@ function resetLiveMode() {
 
     // Reset state for fresh start
     lastDrawnTimestamp = 0;
-    liveRideCounts = { car: 0, bike: 0 };
+    liveRideCounts = { car: 0, bike: 0, other: 0 };
     liveAnimationShown = false;  // Reset so next data will animate
 
     // Hide tracking info until we have data
