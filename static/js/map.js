@@ -51,6 +51,19 @@ function clearDatetimeLayers() {
     updateLayerControl();
 }
 
+function clearActivityLayer(activityType) {
+    // Clear a specific activity layer (used for live mode redraw)
+    if (!activityLayers[activityType]) return;
+
+    var layer = activityLayers[activityType];
+    layer.paths.forEach(function (p) { p.setMap(null); });
+    layer.markers.forEach(function (m) { m.setMap(null); });
+    delete activityLayers[activityType];
+    delete layerVisibility[activityType];
+
+    updateLayerControl();
+}
+
 function addRichLayer(activityType, ridesData, layerStats) {
     if (!activityLayers[activityType]) {
         activityLayers[activityType] = { paths: [], markers: [], visible: true };

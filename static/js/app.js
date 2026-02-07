@@ -8,6 +8,9 @@ var liveData = null;
 var LIVE_POLL_INTERVAL_MS = 30000;  // 30 seconds
 var lastDrawnTimestamp = 0;  // Track last point drawn to avoid missing any
 
+// Live mode ride tracking - to detect when to redraw rich layers
+var liveRideCounts = { car: 0, bike: 0 };
+
 document.addEventListener('DOMContentLoaded', function() {
     var startDateInput = document.getElementById('start-date');
     var endDateInput = document.getElementById('end-date');
@@ -583,6 +586,10 @@ function joinLiveSession() {
     startBtn.style.display = 'none';
     document.getElementById('live-reset-btn').style.display = 'block';
 
+    // Reset state so first poll triggers activity layer refresh
+    lastDrawnTimestamp = 0;
+    liveRideCounts = { car: 0, bike: 0 };
+
     // Call start which will return the existing session
     fetch('/api/live/start', {
         method: 'POST',
@@ -605,7 +612,7 @@ function joinLiveSession() {
             loadLiveTrack();
         }
 
-        // Start polling
+        // Start polling - first poll will detect ride counts and load activity layers
         startLivePolling();
     })
     .catch(function(err) {
@@ -620,8 +627,9 @@ function resumeLiveSession() {
     startBtn.disabled = true;
     startBtn.textContent = 'Resuming...';
 
-    // Reset lastDrawnTimestamp - we'll draw all points from the loaded data
+    // Reset state - we'll draw all points from the loaded data
     lastDrawnTimestamp = 0;
+    liveRideCounts = { car: 0, bike: 0 };
 
     fetch('/api/live/start', {
         method: 'POST',
@@ -747,8 +755,15 @@ function startLiveMode() {
         clearLiveLayer();
     }
 
-    // Reset last drawn timestamp for fresh start
+    // Clear any existing activity layers from previous live session
+    if (typeof clearActivityLayer === 'function') {
+        clearActivityLayer('car');
+        clearActivityLayer('bike');
+    }
+
+    // Reset state for fresh start
     lastDrawnTimestamp = 0;
+    liveRideCounts = { car: 0, bike: 0 };
 
     fetch('/api/live/start', {
         method: 'POST',
@@ -824,7 +839,21 @@ function pollLiveData() {
         var now = new Date();
         document.getElementById('live-last-update').textContent = now.toLocaleTimeString();
 
-        // Draw points we haven't drawn yet (based on points_to_draw from backend)
+        // Check if ride counts changed - need to redraw rich layers
+        var newCarCount = (data.stats && data.stats.car) ? data.stats.car.count : 0;
+        var newBikeCount = (data.stats && data.stats.bike) ? data.stats.bike.count : 0;
+        var ridesChanged = (newCarCount !== liveRideCounts.car) || (newBikeCount !== liveRideCounts.bike);
+
+        if (ridesChanged) {
+            // Update counts
+            liveRideCounts.car = newCarCount;
+            liveRideCounts.bike = newBikeCount;
+            // Fetch and redraw rich layers for activities
+            refreshLiveActivityLayers();
+        }
+
+        // Draw points to the simple live polyline (for real-time updates)
+        // Note: Activity points will be redrawn by refreshLiveActivityLayers
         if (data.points_to_draw && data.points_to_draw.length > 0) {
             appendLivePoints(data.points_to_draw);
             // Update lastDrawnTimestamp to the last point we drew
@@ -837,6 +866,43 @@ function pollLiveData() {
     });
 }
 
+function refreshLiveActivityLayers() {
+    // Fetch and draw rich layers for car and bike activities
+    // This gives us markers and colored rides like datetime mode
+
+    // Fetch car rides if any
+    if (liveRideCounts.car > 0) {
+        fetch('/api/live/track/car')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.success && data.rides && data.rides.length > 0) {
+                // Clear existing car layer before redrawing
+                clearActivityLayer('car');
+                addRichLayer('car', data.rides, data.stats);
+            }
+        })
+        .catch(function(err) {
+            console.error('Failed to fetch car rides:', err.message);
+        });
+    }
+
+    // Fetch bike rides if any
+    if (liveRideCounts.bike > 0) {
+        fetch('/api/live/track/bike')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.success && data.rides && data.rides.length > 0) {
+                // Clear existing bike layer before redrawing
+                clearActivityLayer('bike');
+                addRichLayer('bike', data.rides, data.stats);
+            }
+        })
+        .catch(function(err) {
+            console.error('Failed to fetch bike rides:', err.message);
+        });
+    }
+}
+
 function resetLiveMode() {
     if (!confirm('Reset live mode? This will clear all accumulated data and start fresh from now.')) {
         return;
@@ -844,12 +910,18 @@ function resetLiveMode() {
 
     stopLivePolling();
 
-    // Clear just the live layer, not datetime layers
+    // Clear live layer and activity layers from live mode
     if (typeof clearLiveLayer === 'function') {
         clearLiveLayer();
     }
+    if (typeof clearActivityLayer === 'function') {
+        clearActivityLayer('car');
+        clearActivityLayer('bike');
+    }
 
-    lastDrawnTimestamp = 0;  // Reset for fresh start
+    // Reset state for fresh start
+    lastDrawnTimestamp = 0;
+    liveRideCounts = { car: 0, bike: 0 };
 
     var resetBtn = document.getElementById('live-reset-btn');
     resetBtn.disabled = true;
