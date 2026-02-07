@@ -59,9 +59,17 @@
                 <button id="live-reset-btn" class="btn btn-primary btn-full" style="display: none; margin-top: 8px;">Reset to Now</button>
             </div>
 
-            <!-- Live Activity Summary -->
+            <!-- Current Activity (prominent display) -->
+            <div id="live-current-activity" class="live-current-activity" style="display: none;">
+                <div class="session-label">CURRENT ACTIVITY</div>
+                <div id="current-activity-content" class="current-activity-content"></div>
+            </div>
+
+            <!-- Past Activities (collapsible) -->
             <div id="live-activity-summary" style="margin-top: 12px; display: none;">
-                <div class="session-label">ACTIVITIES</div>
+                <div class="session-label past-activities-header" onclick="togglePastActivities()" style="cursor: pointer;">
+                    PAST ACTIVITIES <span id="past-activities-arrow">▼</span>
+                </div>
                 <div id="live-stats-content" class="live-stats-content"></div>
             </div>
         </div>

@@ -11,8 +11,19 @@ var lastDrawnTimestamp = 0;  // Track last point drawn to avoid missing any
 // Live mode ride tracking - to detect when to redraw rich layers
 var liveRideCounts = { car: 0, bike: 0, other: 0 };
 
+// Store live rides data for current activity display
+var liveRidesData = { car: [], bike: [], other: [] };
+
 // Track if live animation was already shown this session (for hybrid animation)
 var liveAnimationShown = false;
+
+// Toggle past activities visibility
+function togglePastActivities() {
+    var summary = document.getElementById('live-activity-summary');
+    if (summary) {
+        summary.classList.toggle('past-activities-collapsed');
+    }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     var startDateInput = document.getElementById('start-date');
@@ -595,6 +606,7 @@ function joinLiveSession() {
     // Reset state for fresh draw
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0, other: 0 };
+    liveRidesData = { car: [], bike: [], other: [] };
 
     // Call start which will return the existing session
     fetch('/api/live/start', {
@@ -647,6 +659,7 @@ function resumeLiveSession() {
     // Reset state - we'll draw all points from the loaded data
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0, other: 0 };
+    liveRidesData = { car: [], bike: [], other: [] };
 
     fetch('/api/live/start', {
         method: 'POST',
@@ -800,6 +813,7 @@ function startLiveMode() {
     // Reset state for fresh start
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0, other: 0 };
+    liveRidesData = { car: [], bike: [], other: [] };
     liveAnimationShown = false;  // Reset so next entry will animate
 
     // Hide tracking info until we have data
@@ -921,14 +935,17 @@ function refreshLiveActivityLayers() {
         .then(function(response) { return response.json(); })
         .then(function(data) {
             if (data.success && data.rides && data.rides.length > 0) {
-                // Clear existing car layer before redrawing
+                liveRidesData.car = data.rides;
                 clearActivityLayer('car');
                 addRichLayer('car', data.rides, data.stats);
+                updateCurrentActivityDisplay();
             }
         })
         .catch(function(err) {
             console.error('Failed to fetch car rides:', err.message);
         });
+    } else {
+        liveRidesData.car = [];
     }
 
     // Fetch bike rides if any
@@ -937,14 +954,17 @@ function refreshLiveActivityLayers() {
         .then(function(response) { return response.json(); })
         .then(function(data) {
             if (data.success && data.rides && data.rides.length > 0) {
-                // Clear existing bike layer before redrawing
+                liveRidesData.bike = data.rides;
                 clearActivityLayer('bike');
                 addRichLayer('bike', data.rides, data.stats);
+                updateCurrentActivityDisplay();
             }
         })
         .catch(function(err) {
             console.error('Failed to fetch bike rides:', err.message);
         });
+    } else {
+        liveRidesData.bike = [];
     }
 
     // Fetch other (walking) rides if any
@@ -953,15 +973,70 @@ function refreshLiveActivityLayers() {
         .then(function(response) { return response.json(); })
         .then(function(data) {
             if (data.success && data.rides && data.rides.length > 0) {
-                // Clear existing other layer before redrawing
+                liveRidesData.other = data.rides;
                 clearActivityLayer('other');
                 addRichLayer('other', data.rides, data.stats);
+                updateCurrentActivityDisplay();
             }
         })
         .catch(function(err) {
             console.error('Failed to fetch other rides:', err.message);
         });
+    } else {
+        liveRidesData.other = [];
     }
+
+    // Update current activity after all fetches
+    updateCurrentActivityDisplay();
+}
+
+function updateCurrentActivityDisplay() {
+    // Find the most recent ride across all activity types
+    var latestRide = null;
+    var latestType = null;
+    var icons = { car: '🚗', bike: '🚴', other: '🚶' };
+    var names = { car: 'Car', bike: 'Bike', other: 'Walking' };
+
+    ['car', 'bike', 'other'].forEach(function(type) {
+        var rides = liveRidesData[type];
+        if (rides && rides.length > 0) {
+            var lastRide = rides[rides.length - 1];
+            if (!latestRide || lastRide.end_timestamp > latestRide.end_timestamp) {
+                latestRide = lastRide;
+                latestType = type;
+            }
+        }
+    });
+
+    var currentActivityDiv = document.getElementById('live-current-activity');
+    var contentDiv = document.getElementById('current-activity-content');
+
+    if (!latestRide || !currentActivityDiv || !contentDiv) {
+        if (currentActivityDiv) currentActivityDiv.style.display = 'none';
+        return;
+    }
+
+    // Format duration
+    var durationMins = Math.floor(latestRide.duration / 60);
+    var durationStr = durationMins >= 60 ?
+        Math.floor(durationMins / 60) + 'h ' + (durationMins % 60) + 'm' :
+        durationMins + 'm';
+
+    // Build the display
+    var html = '<div class="current-activity-type">' +
+        '<span class="activity-icon">' + icons[latestType] + '</span>' +
+        names[latestType] + ' Ride ' + latestRide.ride_number +
+        '</div>' +
+        '<div class="current-activity-stats">' +
+        '<span class="stat-label">Started:</span><span class="stat-value">' + (latestRide.start_datetime_str || latestRide.start_time_str) + '</span>' +
+        '<span class="stat-label">Distance:</span><span class="stat-value">' + latestRide.distance.toFixed(2) + ' km</span>' +
+        '<span class="stat-label">Duration:</span><span class="stat-value">' + durationStr + '</span>' +
+        '<span class="stat-label">Avg Speed:</span><span class="stat-value">' + latestRide.avg_speed.toFixed(1) + ' km/h</span>' +
+        '<span class="stat-label">Points:</span><span class="stat-value">' + latestRide.points.length + '</span>' +
+        '</div>';
+
+    contentDiv.innerHTML = html;
+    currentActivityDiv.style.display = 'block';
 }
 
 function resetLiveMode() {
@@ -983,11 +1058,16 @@ function resetLiveMode() {
     // Reset state for fresh start
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0, other: 0 };
+    liveRidesData = { car: [], bike: [], other: [] };
     liveAnimationShown = false;  // Reset so next data will animate
 
-    // Hide tracking info until we have data
+    // Hide tracking info and current activity until we have data
     var trackingInfo = document.getElementById('live-tracking-info');
     if (trackingInfo) trackingInfo.style.display = 'none';
+    var currentActivity = document.getElementById('live-current-activity');
+    if (currentActivity) currentActivity.style.display = 'none';
+    var activitySummary = document.getElementById('live-activity-summary');
+    if (activitySummary) activitySummary.style.display = 'none';
 
     var resetBtn = document.getElementById('live-reset-btn');
     resetBtn.disabled = true;
@@ -1046,20 +1126,56 @@ function updateLiveUI(data) {
         updateLiveTrackingStats(data.total_distance, data.total_duration, data.last_point_time);
     }
 
-    // Update activity stats
+    // Update activity stats (past rides - excluding current)
     if (data.stats && Object.keys(data.stats).length > 0) {
         var statsContent = document.getElementById('live-stats-content');
         var html = '';
-        var icons = { car: 'Car', bike: 'Bike', other: 'Other' };
+        var icons = { car: '🚗', bike: '🚴', other: '🚶' };
+        var names = { car: 'Car', bike: 'Bike', other: 'Walking' };
 
+        // Get all past rides (all except the most recent one which is shown in Current Activity)
+        var allRides = [];
         ['car', 'bike', 'other'].forEach(function(type) {
-            var s = data.stats[type];
-            if (s && s.total_points > 0) {
-                html += '<div>' + icons[type] + ': ' +
-                        '<span class="stat-value">' + s.count + ' rides, ' +
-                        s.total_distance + ' km</span></div>';
-            }
+            var rides = liveRidesData[type] || [];
+            rides.forEach(function(ride) {
+                allRides.push({ type: type, ride: ride });
+            });
         });
+
+        // Sort by end timestamp descending (most recent first), skip the first one (current)
+        allRides.sort(function(a, b) { return b.ride.end_timestamp - a.ride.end_timestamp; });
+        var pastRides = allRides.slice(1);  // Skip current activity
+
+        if (pastRides.length > 0) {
+            pastRides.forEach(function(item) {
+                var ride = item.ride;
+                var type = item.type;
+                var durationMins = Math.floor(ride.duration / 60);
+                var durationStr = durationMins >= 60 ?
+                    Math.floor(durationMins / 60) + 'h ' + (durationMins % 60) + 'm' :
+                    durationMins + 'm';
+
+                html += '<div class="past-ride-item">' +
+                    '<span class="past-ride-icon">' + icons[type] + '</span> ' +
+                    '<strong>' + names[type] + ' ' + ride.ride_number + '</strong><br>' +
+                    '<span class="past-ride-details">' +
+                    (ride.start_datetime_str || ride.start_time_str) + ' • ' +
+                    ride.distance.toFixed(1) + ' km • ' +
+                    durationStr + ' • ' +
+                    ride.avg_speed.toFixed(1) + ' km/h' +
+                    '</span></div>';
+            });
+        } else {
+            // Show summary if no detailed ride data yet
+            ['car', 'bike', 'other'].forEach(function(type) {
+                var s = data.stats[type];
+                if (s && s.total_points > 0) {
+                    html += '<div>' + icons[type] + ' ' + names[type] + ': ' +
+                            '<span class="stat-value">' + s.count + ' rides, ' +
+                            s.total_distance + ' km</span></div>';
+                }
+            });
+        }
 
         if (html) {
             statsContent.innerHTML = html;

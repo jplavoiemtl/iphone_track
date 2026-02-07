@@ -1,6 +1,7 @@
 var map;
 var activityLayers = {};
 var layerVisibility = {};
+var layerStats = {};  // Store stats for layer control display
 
 var activityConfig = {
     'car': { color: '#FF4444', icon: '\u{1F697}', name: 'Car' },
@@ -26,6 +27,7 @@ function clearAllLayers() {
     });
     activityLayers = {};
     layerVisibility = {};
+    layerStats = {};
 
     // Also clear live layer polyline
     if (livePolyline) {
@@ -46,6 +48,7 @@ function clearDatetimeLayers() {
         layer.markers.forEach(function (m) { m.setMap(null); });
         delete activityLayers[key];
         delete layerVisibility[key];
+        delete layerStats[key];
     });
 
     updateLayerControl();
@@ -60,11 +63,12 @@ function clearActivityLayer(activityType) {
     layer.markers.forEach(function (m) { m.setMap(null); });
     delete activityLayers[activityType];
     delete layerVisibility[activityType];
+    delete layerStats[activityType];
 
     updateLayerControl();
 }
 
-function addRichLayer(activityType, ridesData, layerStats) {
+function addRichLayer(activityType, ridesData, statsData) {
     if (!activityLayers[activityType]) {
         activityLayers[activityType] = { paths: [], markers: [], visible: true };
         layerVisibility[activityType] = true;
@@ -72,6 +76,16 @@ function addRichLayer(activityType, ridesData, layerStats) {
 
     var config = activityConfig[activityType] || activityConfig['all'];
     var layer = activityLayers[activityType];
+
+    // Store stats for layer control display
+    if (statsData) {
+        layerStats[activityType] = {
+            distance: statsData.distance || 0,
+            duration: statsData.duration || 0,
+            rides: statsData.rides || ridesData.length,
+            points: statsData.points || 0
+        };
+    }
 
     ridesData.forEach(function (ride) {
         for (var i = 1; i < ride.points.length; i++) {
@@ -104,6 +118,16 @@ function addBasicLayer(activityType, points, stats, startTimeStr, endTimeStr) {
 
     var config = activityConfig[activityType] || activityConfig['all'];
     var layer = activityLayers[activityType];
+
+    // Store stats for layer control display
+    if (stats) {
+        layerStats[activityType] = {
+            distance: stats.distance || 0,
+            duration: stats.duration || 0,
+            rides: stats.rides || 1,
+            points: stats.points || points.length
+        };
+    }
 
     for (var i = 1; i < points.length; i++) {
         var pathSegment = new google.maps.Polyline({
@@ -204,12 +228,16 @@ function addRideMarkers(activityType, ride, layer) {
     var durationHours = Math.floor(ride.duration / 3600);
     var durationMins = Math.floor((ride.duration % 3600) / 60);
 
+    // Use datetime strings (with date) if available, fall back to time-only
+    var startTimeDisplay = ride.start_datetime_str || ride.start_time_str;
+    var endTimeDisplay = ride.end_datetime_str || ride.end_time_str;
+
     var startContent = '<div style="font-size:12px; min-width:150px;">' +
-        config.name + ' Ride ' + ride.ride_number + '<br>Start: ' + ride.start_time_str + '</div>';
+        config.name + ' Ride ' + ride.ride_number + '<br>Start: ' + startTimeDisplay + '</div>';
 
     var endContent = '<div style="font-size:12px; min-width:150px;">' +
         config.name + ' Ride ' + ride.ride_number + '<br>' +
-        'End: ' + ride.end_time_str + '<br>' +
+        'End: ' + endTimeDisplay + '<br>' +
         'Distance: ' + ride.distance.toFixed(2) + ' km<br>' +
         'Duration: ' + durationHours + 'h ' + durationMins + 'm<br>' +
         'Avg Speed: ' + ride.avg_speed.toFixed(1) + ' km/h<br>' +
@@ -775,7 +803,7 @@ function createLayerControl() {
     var controlDiv = document.createElement('div');
     controlDiv.id = 'mapLayerControl';
     controlDiv.innerHTML =
-        '<div style="background:rgba(255,255,255,0.95);border:2px solid #666;border-radius:8px;margin:10px;padding:12px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);min-width:200px;">' +
+        '<div style="background:rgba(255,255,255,0.95);border:2px solid #666;border-radius:8px;margin:10px;padding:12px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);min-width:220px;">' +
         '<div style="font-weight:bold;margin-bottom:10px;color:#333;font-size:14px;text-align:center;border-bottom:1px solid #ddd;padding-bottom:8px;">Active Layers</div>' +
         '<div id="mapLayerList"></div>' +
         '</div>';
@@ -793,15 +821,37 @@ function updateLayerControl() {
         if (layer.paths.length > 0 || layer.markers.length > 0) {
             var config = activityConfig[activityType] || activityConfig['all'];
             var isVisible = layerVisibility[activityType];
+            var stats = layerStats[activityType];
 
+            // Container for layer item + stats
+            var container = document.createElement('div');
+            container.style.cssText = 'margin:8px 0;';
+
+            // Layer header row
             var item = document.createElement('div');
-            item.style.cssText = 'display:flex;align-items:center;margin:8px 0;padding:6px;background:rgba(248,248,248,0.8);border-radius:6px;border:1px solid #e0e0e0;';
+            item.style.cssText = 'display:flex;align-items:center;padding:6px;background:rgba(248,248,248,0.8);border-radius:6px 6px ' + (stats ? '0 0' : '6px 6px') + ';border:1px solid #e0e0e0;' + (stats ? 'border-bottom:none;' : '');
             item.innerHTML =
                 '<span style="font-size:16px;margin-right:8px;width:20px;text-align:center;">' + config.icon + '</span>' +
                 '<span style="flex-grow:1;font-weight:500;color:#333;">' + config.name + '</span>' +
                 '<button onclick="toggleLayer(\'' + activityType + '\')" style="padding:4px 8px;border:none;border-radius:4px;color:white;font-size:10px;font-weight:bold;cursor:pointer;background-color:' + config.color + ';opacity:' + (isVisible ? '1' : '0.5') + ';">' +
                 (isVisible ? 'Hide' : 'Show') + '</button>';
-            layerList.appendChild(item);
+            container.appendChild(item);
+
+            // Stats row (if available)
+            if (stats) {
+                var durationMins = Math.floor(stats.duration / 60);
+                var durationStr = durationMins >= 60 ?
+                    Math.floor(durationMins / 60) + 'h ' + (durationMins % 60) + 'm' :
+                    durationMins + 'm';
+                var avgSpeed = stats.duration > 0 ? (stats.distance / stats.duration * 3600) : 0;
+
+                var statsRow = document.createElement('div');
+                statsRow.style.cssText = 'padding:4px 6px 6px 34px;background:rgba(248,248,248,0.6);border-radius:0 0 6px 6px;border:1px solid #e0e0e0;border-top:none;font-size:11px;color:#666;';
+                statsRow.innerHTML = stats.distance.toFixed(1) + ' km | ' + durationStr + ' | ' + avgSpeed.toFixed(1) + ' km/h';
+                container.appendChild(statsRow);
+            }
+
+            layerList.appendChild(container);
         }
     });
 }

@@ -567,6 +567,96 @@ body {
     font-weight: 600;
 }
 
+/* Past Ride Items */
+.past-ride-item {
+    padding: 6px 0;
+    border-bottom: 1px solid #1a2a3a;
+}
+
+.past-ride-item:last-child {
+    border-bottom: none;
+}
+
+.past-ride-icon {
+    font-size: 14px;
+}
+
+.past-ride-details {
+    font-size: 11px;
+    color: #8888a8;
+    display: block;
+    margin-top: 2px;
+    padding-left: 22px;
+}
+
+/* Current Activity Section */
+.live-current-activity {
+    margin-top: 12px;
+    background-color: #0d1b2a;
+    border-radius: 6px;
+    border: 1px solid #53cf6e;
+    padding: 10px;
+}
+
+.current-activity-content {
+    font-size: 12px;
+    color: #e0e0e8;
+}
+
+.current-activity-type {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #53cf6e;
+}
+
+.current-activity-type .activity-icon {
+    font-size: 18px;
+    margin-right: 8px;
+}
+
+.current-activity-stats {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    font-size: 12px;
+}
+
+.current-activity-stats .stat-label {
+    color: #8888a8;
+}
+
+.current-activity-stats .stat-value {
+    color: #e0e0e8;
+    font-weight: 500;
+}
+
+/* Past Activities Header */
+.past-activities-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.past-activities-header:hover {
+    color: #53cf6e;
+}
+
+#past-activities-arrow {
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+.past-activities-collapsed #past-activities-arrow {
+    transform: rotate(-90deg);
+}
+
+.past-activities-collapsed .live-stats-content {
+    display: none;
+}
+
 /* ============================
    Mobile / Responsive
    ============================ */
