@@ -11,6 +11,9 @@ var lastDrawnTimestamp = 0;  // Track last point drawn to avoid missing any
 // Live mode ride tracking - to detect when to redraw rich layers
 var liveRideCounts = { car: 0, bike: 0 };
 
+// Track if live animation was already shown this session (for hybrid animation)
+var liveAnimationShown = false;
+
 document.addEventListener('DOMContentLoaded', function() {
     var startDateInput = document.getElementById('start-date');
     var endDateInput = document.getElementById('end-date');
@@ -289,7 +292,7 @@ function startTracking() {
     if (!activityType) return;
 
     stopAnimation();
-    clearDatetimeLayers();  // Preserve live layer
+    clearAllLayers();  // Clear all layers for clean tracking
     activeLayers.clear();
 
     document.getElementById('start-tracking-btn').disabled = true;
@@ -586,7 +589,10 @@ function joinLiveSession() {
     startBtn.style.display = 'none';
     document.getElementById('live-reset-btn').style.display = 'block';
 
-    // Reset state so first poll triggers activity layer refresh
+    // Decide whether to animate: only if animation hasn't been shown yet this session
+    var shouldAnimate = !liveAnimationShown;
+
+    // Reset state for fresh draw
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0 };
 
@@ -609,11 +615,22 @@ function joinLiveSession() {
 
         // Load existing track on map
         if (data.total_points > 0) {
-            loadLiveTrack();
+            if (shouldAnimate) {
+                // First time - animate, then start polling after animation completes
+                loadLiveTrack(true, function() {
+                    liveAnimationShown = true;
+                    startLivePolling();
+                });
+            } else {
+                // Already seen animation - draw instantly
+                loadLiveTrack(false, function() {
+                    startLivePolling();
+                });
+            }
+        } else {
+            // No points yet - start polling immediately
+            startLivePolling();
         }
-
-        // Start polling - first poll will detect ride counts and load activity layers
-        startLivePolling();
     })
     .catch(function(err) {
         alert('Failed to join live session: ' + err.message);
@@ -654,13 +671,17 @@ function resumeLiveSession() {
         startBtn.style.display = 'none';
         document.getElementById('live-reset-btn').style.display = 'block';
 
-        // Load existing track on map
+        // Load existing track on map (with animation for first view after resume)
         if (data.total_points > 0) {
-            loadLiveTrack();
+            // Animate (first view after restart), then start polling
+            loadLiveTrack(true, function() {
+                liveAnimationShown = true;
+                startLivePolling();
+            });
+        } else {
+            // No points yet - start polling immediately
+            startLivePolling();
         }
-
-        // Start polling
-        startLivePolling();
     })
     .catch(function(err) {
         startBtn.disabled = false;
@@ -764,6 +785,7 @@ function startLiveMode() {
     // Reset state for fresh start
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0 };
+    liveAnimationShown = false;  // Reset so next entry will animate
 
     fetch('/api/live/start', {
         method: 'POST',
@@ -922,6 +944,7 @@ function resetLiveMode() {
     // Reset state for fresh start
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0 };
+    liveAnimationShown = false;  // Reset so next data will animate
 
     var resetBtn = document.getElementById('live-reset-btn');
     resetBtn.disabled = true;
@@ -1012,23 +1035,41 @@ function updateLiveIndicator(active) {
     }
 }
 
-function loadLiveTrack() {
+function loadLiveTrack(animate, onComplete) {
+    // Default to true for animation on first load
+    if (animate === undefined) animate = true;
+
     fetch('/api/live/track/all')
     .then(function(response) { return response.json(); })
     .then(function(data) {
         if (!data.success) {
             console.log('No live track data yet');
+            if (onComplete) onComplete();
             return;
         }
 
         if (data.points && data.points.length > 0) {
-            drawLiveTrackInstant(data.points);
-            // Update lastDrawnTimestamp to the last point
-            lastDrawnTimestamp = data.points[data.points.length - 1].tst;
+            if (animate && typeof addBasicLayerAnimated === 'function') {
+                // Animate the initial track playback
+                addBasicLayerAnimated('live', data.points, data.stats,
+                    data.start_time_str, data.end_time_str, function() {
+                        // Animation complete - update lastDrawnTimestamp
+                        lastDrawnTimestamp = data.points[data.points.length - 1].tst;
+                        if (onComplete) onComplete();
+                    });
+            } else {
+                // Draw instantly (for resume or when animation not available)
+                drawLiveTrackInstant(data.points);
+                lastDrawnTimestamp = data.points[data.points.length - 1].tst;
+                if (onComplete) onComplete();
+            }
+        } else {
+            if (onComplete) onComplete();
         }
     })
     .catch(function(err) {
         console.error('Failed to load live track:', err.message);
+        if (onComplete) onComplete();
     });
 }
 
@@ -1064,7 +1105,7 @@ function appendLivePoints(newPoints) {
             }
         }
     } else {
-        // Fallback - reload entire track
-        loadLiveTrack();
+        // Fallback - reload entire track (no animation since we're already tracking)
+        loadLiveTrack(false);
     }
 }
