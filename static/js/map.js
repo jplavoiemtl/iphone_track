@@ -37,6 +37,20 @@ function clearAllLayers() {
     updateLayerControl();
 }
 
+function clearDatetimeLayers() {
+    // Clear all layers except the live layer
+    Object.keys(activityLayers).forEach(function (key) {
+        if (key === 'live') return;  // Skip live layer
+        var layer = activityLayers[key];
+        layer.paths.forEach(function (p) { p.setMap(null); });
+        layer.markers.forEach(function (m) { m.setMap(null); });
+        delete activityLayers[key];
+        delete layerVisibility[key];
+    });
+
+    updateLayerControl();
+}
+
 function addRichLayer(activityType, ridesData, layerStats) {
     if (!activityLayers[activityType]) {
         activityLayers[activityType] = { paths: [], markers: [], visible: true };

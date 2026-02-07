@@ -286,7 +286,7 @@ function startTracking() {
     if (!activityType) return;
 
     stopAnimation();
-    clearAllLayers();
+    clearDatetimeLayers();  // Preserve live layer
     activeLayers.clear();
 
     document.getElementById('start-tracking-btn').disabled = true;
