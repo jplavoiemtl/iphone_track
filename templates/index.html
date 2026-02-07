@@ -143,6 +143,14 @@
               <button id="save-map-btn" class="btn btn-primary btn-full" style="margin-top:10px;" onclick="saveInteractiveMap()">Save Interactive Map</button>
               <div id="save-status"></div>
           </div>
+
+          <!-- Activities Detail (datetime mode) -->
+          <div id="datetime-activities" class="panel" style="display: none;">
+              <div class="session-label datetime-activities-header" onclick="toggleDatetimeActivities()" style="cursor: pointer;">
+                  ACTIVITIES <span id="datetime-activities-arrow">▼</span>
+              </div>
+              <div id="datetime-activities-content" class="live-stats-content"></div>
+          </div>
         </div>
     </div>
 

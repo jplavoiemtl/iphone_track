@@ -633,7 +633,7 @@ body {
     font-weight: 500;
 }
 
-/* Past Activities Header */
+/* Past Activities Header (live mode) */
 .past-activities-header {
     display: flex;
     justify-content: space-between;
@@ -641,6 +641,17 @@ body {
 }
 
 .past-activities-header:hover {
+    color: #53cf6e;
+}
+
+/* Datetime Activities Header */
+.datetime-activities-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.datetime-activities-header:hover {
     color: #53cf6e;
 }
 
@@ -655,6 +666,15 @@ body {
 
 .past-activities-collapsed .live-stats-content {
     display: none;
+}
+
+#datetime-activities-arrow {
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+.past-activities-collapsed #datetime-activities-arrow {
+    transform: rotate(-90deg);
 }
 
 /* ============================

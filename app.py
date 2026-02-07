@@ -142,12 +142,53 @@ def detect_activities():
                 'avg_speed': round((s['total_distance'] / s['total_duration'] * 3600), 1) if s['total_duration'] > 0 else 0
             }
 
+    # Build rides summary for display in UI
+    rides_summary = []
+    for activity_type in ['car', 'bike', 'other']:
+        if activity_type in activities:
+            for ride_idx, ride in enumerate(activities[activity_type]):
+                if not ride['points']:
+                    continue
+                start_timestamp = ride['start']
+                end_timestamp = ride['end']
+                start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
+                end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
+
+                ride_distance = 0
+                if len(ride['points']) > 1:
+                    for j in range(1, len(ride['points'])):
+                        prev = ride['points'][j - 1]
+                        curr = ride['points'][j]
+                        distance = haversine_with_stationary_detection(
+                            prev["lat"], prev["lon"], curr["lat"], curr["lon"])
+                        ride_distance += distance * 1.05
+
+                ride_duration = end_timestamp - start_timestamp
+                avg_speed = (ride_distance / ride_duration * 3600) if ride_duration > 0 else 0
+
+                rides_summary.append({
+                    'type': activity_type,
+                    'ride_number': ride_idx + 1,
+                    'start_timestamp': start_timestamp,
+                    'end_timestamp': end_timestamp,
+                    'start_datetime_str': start_local.strftime('%b %d, %H:%M'),
+                    'end_datetime_str': end_local.strftime('%b %d, %H:%M'),
+                    'distance': round(ride_distance, 2),
+                    'duration': ride_duration,
+                    'avg_speed': round(avg_speed, 1),
+                    'points': len(ride['points'])
+                })
+
+    # Sort by start timestamp descending (most recent first)
+    rides_summary.sort(key=lambda x: x['start_timestamp'], reverse=True)
+
     return jsonify({
         "success": True,
         "timezone": tz_name,
         "total_points": len(gps_points),
         "activity_markers": len(lwt_markers),
         "stats": stats_response,
+        "rides": rides_summary,
         "timeline": timeline
     })
 

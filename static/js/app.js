@@ -17,11 +17,19 @@ var liveRidesData = { car: [], bike: [], other: [] };
 // Track if live animation was already shown this session (for hybrid animation)
 var liveAnimationShown = false;
 
-// Toggle past activities visibility
+// Toggle past activities visibility (live mode)
 function togglePastActivities() {
     var summary = document.getElementById('live-activity-summary');
     if (summary) {
         summary.classList.toggle('past-activities-collapsed');
+    }
+}
+
+// Toggle activities visibility (datetime mode)
+function toggleDatetimeActivities() {
+    var section = document.getElementById('datetime-activities');
+    if (section) {
+        section.classList.toggle('past-activities-collapsed');
     }
 }
 
@@ -184,6 +192,7 @@ function detectActivities() {
 
         displaySummary(data);
         showActivityControls(data);
+        displayDatetimeActivities(data);
     })
     .catch(function(err) {
         detectBtn.disabled = false;
@@ -296,6 +305,44 @@ function setupLayerCheckboxes(data) {
         label.appendChild(document.createTextNode(' ' + icons[type]));
         container.appendChild(label);
     });
+}
+
+function displayDatetimeActivities(data) {
+    var activitiesSection = document.getElementById('datetime-activities');
+    var contentDiv = document.getElementById('datetime-activities-content');
+
+    if (!activitiesSection || !contentDiv) return;
+
+    // Check if there are any rides
+    if (!data.rides || data.rides.length === 0) {
+        activitiesSection.style.display = 'none';
+        return;
+    }
+
+    var icons = { car: '🚗', bike: '🚴', other: '🚶' };
+    var names = { car: 'Car', bike: 'Bike', other: 'Walking' };
+    var html = '';
+
+    data.rides.forEach(function(ride) {
+        var durationMins = Math.floor(ride.duration / 60);
+        var durationStr = durationMins >= 60 ?
+            Math.floor(durationMins / 60) + 'h ' + (durationMins % 60) + 'm' :
+            durationMins + 'm';
+
+        html += '<div class="past-ride-item">' +
+            '<span class="past-ride-icon">' + icons[ride.type] + '</span> ' +
+            '<strong>' + names[ride.type] + ' ' + ride.ride_number + '</strong><br>' +
+            '<span class="past-ride-details">' +
+            ride.start_datetime_str + ' • ' +
+            ride.distance.toFixed(1) + ' km • ' +
+            durationStr + ' • ' +
+            ride.avg_speed.toFixed(1) + ' km/h • ' +
+            ride.points + ' pts' +
+            '</span></div>';
+    });
+
+    contentDiv.innerHTML = html;
+    activitiesSection.style.display = 'block';
 }
 
 function startTracking() {
