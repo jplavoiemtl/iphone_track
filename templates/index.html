@@ -39,6 +39,21 @@
                 <div>Points: <span id="live-total-points">0</span></div>
             </div>
 
+            <!-- Live Tracking Stats (shown during animation and polling) -->
+            <div id="live-tracking-info" class="live-tracking-stats" style="display: none;">
+                <div class="session-label">TRACKING</div>
+                <div class="stats-grid">
+                    <span class="stat-label">Distance:</span>
+                    <span class="stat-value" id="live-stat-distance">0.00 km</span>
+                    <span class="stat-label">Duration:</span>
+                    <span class="stat-value" id="live-stat-duration">0h 0m</span>
+                    <span class="stat-label">Avg Speed:</span>
+                    <span class="stat-value" id="live-stat-speed">0.0 km/h</span>
+                    <span class="stat-label">Time:</span>
+                    <span class="stat-value" id="live-stat-time">--:--:--</span>
+                </div>
+            </div>
+
             <div class="live-controls">
                 <button id="live-start-btn" class="btn btn-success btn-full">Start Live Mode</button>
                 <button id="live-reset-btn" class="btn btn-primary btn-full" style="display: none; margin-top: 8px;">Reset to Now</button>

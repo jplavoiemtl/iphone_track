@@ -705,8 +705,10 @@ function switchToDateTimeMode() {
     document.getElementById('datetime-panel').style.display = 'block';
     document.getElementById('live-panel').style.display = 'none';
 
-    // Show datetime layers (live layer stays visible - user can toggle via layer control)
-    showDatetimeLayers();
+    // Clear all layers - each mode has its own clean state
+    if (typeof clearAllLayers === 'function') {
+        clearAllLayers();
+    }
 }
 
 function switchToLiveMode() {
@@ -722,7 +724,10 @@ function switchToLiveMode() {
     document.getElementById('datetime-panel').style.display = 'none';
     document.getElementById('live-panel').style.display = 'block';
 
-    // Layers stay visible - user can toggle via layer control
+    // Clear all layers - live mode will redraw its own layers
+    if (typeof clearAllLayers === 'function') {
+        clearAllLayers();
+    }
 
     // Check live status to see if there's an existing session
     checkLiveStatus();
@@ -786,6 +791,10 @@ function startLiveMode() {
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0 };
     liveAnimationShown = false;  // Reset so next entry will animate
+
+    // Hide tracking info until we have data
+    var trackingInfo = document.getElementById('live-tracking-info');
+    if (trackingInfo) trackingInfo.style.display = 'none';
 
     fetch('/api/live/start', {
         method: 'POST',
@@ -946,6 +955,10 @@ function resetLiveMode() {
     liveRideCounts = { car: 0, bike: 0 };
     liveAnimationShown = false;  // Reset so next data will animate
 
+    // Hide tracking info until we have data
+    var trackingInfo = document.getElementById('live-tracking-info');
+    if (trackingInfo) trackingInfo.style.display = 'none';
+
     var resetBtn = document.getElementById('live-reset-btn');
     resetBtn.disabled = true;
     resetBtn.textContent = 'Resetting...';
@@ -998,6 +1011,11 @@ function updateLiveUI(data) {
     // Update total points
     document.getElementById('live-total-points').textContent = (data.total_points || 0).toLocaleString();
 
+    // Update tracking stats (distance, duration, speed, time)
+    if (data.total_points > 0) {
+        updateLiveTrackingStats(data.total_distance, data.total_duration, data.last_point_time);
+    }
+
     // Update activity stats
     if (data.stats && Object.keys(data.stats).length > 0) {
         var statsContent = document.getElementById('live-stats-content');
@@ -1020,6 +1038,68 @@ function updateLiveUI(data) {
     }
 }
 
+function updateLiveTrackingStats(distance, duration, timeStr) {
+    // Show the tracking info section
+    var trackingInfo = document.getElementById('live-tracking-info');
+    if (trackingInfo) {
+        trackingInfo.style.display = 'block';
+    }
+
+    // Update distance
+    var distEl = document.getElementById('live-stat-distance');
+    if (distEl && distance !== undefined) {
+        distEl.textContent = distance.toFixed(2) + ' km';
+    }
+
+    // Update duration
+    var durEl = document.getElementById('live-stat-duration');
+    if (durEl && duration !== undefined) {
+        var hours = Math.floor(duration / 3600);
+        var mins = Math.floor((duration % 3600) / 60);
+        durEl.textContent = hours + 'h ' + mins + 'm';
+    }
+
+    // Update avg speed
+    var speedEl = document.getElementById('live-stat-speed');
+    if (speedEl && distance !== undefined && duration !== undefined && duration > 0) {
+        var speed = distance / duration * 3600;
+        speedEl.textContent = speed.toFixed(1) + ' km/h';
+    }
+
+    // Update time
+    var timeEl = document.getElementById('live-stat-time');
+    if (timeEl && timeStr) {
+        timeEl.textContent = timeStr;
+    }
+}
+
+function setupLiveAnimationProgress() {
+    // Hook into animation progress callback for live mode
+    onAnimationProgress = function(info) {
+        updateLiveTrackingStats(info.distance, info.duration, null);
+
+        // Format timestamp if available
+        if (info.timestamp) {
+            var date = new Date(info.timestamp * 1000);
+            var timeStr = date.toLocaleTimeString();
+            var timeEl = document.getElementById('live-stat-time');
+            if (timeEl) {
+                timeEl.textContent = timeStr;
+            }
+        }
+
+        // Update points count
+        var pointsEl = document.getElementById('live-total-points');
+        if (pointsEl) {
+            pointsEl.textContent = info.pointIndex.toLocaleString();
+        }
+    };
+}
+
+function clearLiveAnimationProgress() {
+    onAnimationProgress = null;
+}
+
 function updateLiveIndicator(active) {
     var indicator = document.getElementById('live-indicator');
     var statusText = document.getElementById('live-status-text');
@@ -1039,6 +1119,12 @@ function loadLiveTrack(animate, onComplete) {
     // Default to true for animation on first load
     if (animate === undefined) animate = true;
 
+    // Show tracking info section
+    var trackingInfo = document.getElementById('live-tracking-info');
+    if (trackingInfo) {
+        trackingInfo.style.display = 'block';
+    }
+
     fetch('/api/live/track/all')
     .then(function(response) { return response.json(); })
     .then(function(data) {
@@ -1050,10 +1136,14 @@ function loadLiveTrack(animate, onComplete) {
 
         if (data.points && data.points.length > 0) {
             if (animate && typeof addBasicLayerAnimated === 'function') {
+                // Set up animation progress callback for live stats
+                setupLiveAnimationProgress();
+
                 // Animate the initial track playback
                 addBasicLayerAnimated('live', data.points, data.stats,
                     data.start_time_str, data.end_time_str, function() {
-                        // Animation complete - update lastDrawnTimestamp
+                        // Animation complete - clear callback and update timestamp
+                        clearLiveAnimationProgress();
                         lastDrawnTimestamp = data.points[data.points.length - 1].tst;
                         if (onComplete) onComplete();
                     });
@@ -1061,6 +1151,10 @@ function loadLiveTrack(animate, onComplete) {
                 // Draw instantly (for resume or when animation not available)
                 drawLiveTrackInstant(data.points);
                 lastDrawnTimestamp = data.points[data.points.length - 1].tst;
+                // Update tracking stats from data
+                if (data.stats) {
+                    updateLiveTrackingStats(data.stats.distance, data.stats.duration, data.end_time_str);
+                }
                 if (onComplete) onComplete();
             }
         } else {

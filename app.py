@@ -892,6 +892,23 @@ def live_poll():
         if p["tst"] > last_drawn_timestamp
     ]
 
+    # Calculate total distance and duration for tracking display
+    total_distance = 0
+    total_duration = 0
+    last_point_time = None
+    if len(gps_points) > 1:
+        for i in range(1, len(gps_points)):
+            prev = gps_points[i - 1]
+            curr = gps_points[i]
+            distance = haversine_with_stationary_detection(
+                prev["lat"], prev["lon"], curr["lat"], curr["lon"])
+            total_distance += distance * 1.05
+        total_duration = gps_points[-1]["tst"] - gps_points[0]["tst"]
+        # Format last point time
+        last_tst = gps_points[-1]["tst"]
+        last_dt = datetime.fromtimestamp(last_tst, tz=pytz.UTC).astimezone(detected_tz)
+        last_point_time = last_dt.strftime('%H:%M:%S')
+
     return jsonify({
         "success": True,
         "new_points": new_points_response,
@@ -899,6 +916,9 @@ def live_poll():
         "points_to_draw": points_to_draw,
         "points_to_draw_count": len(points_to_draw),
         "total_points": len(gps_points),
+        "total_distance": round(total_distance, 2),
+        "total_duration": total_duration,
+        "last_point_time": last_point_time,
         "stats": stats_response,
         "last_poll_timestamp": now
     })
