@@ -697,6 +697,11 @@ function switchToDateTimeMode() {
     currentMode = 'datetime';
     stopLivePolling();
 
+    // Stop any ongoing animation from live mode
+    if (typeof stopAnimation === 'function') {
+        stopAnimation();
+    }
+
     // Update mode toggle buttons
     document.getElementById('mode-datetime').classList.add('active');
     document.getElementById('mode-live').classList.remove('active');
@@ -715,6 +720,11 @@ function switchToLiveMode() {
     if (currentMode === 'live') return;
 
     currentMode = 'live';
+
+    // Stop any ongoing animation from datetime mode
+    if (typeof stopAnimation === 'function') {
+        stopAnimation();
+    }
 
     // Update mode toggle buttons
     document.getElementById('mode-live').classList.add('active');
