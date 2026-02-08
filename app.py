@@ -390,8 +390,8 @@ def save_map():
                     'start': ride['start'],
                     'end': ride['end'],
                     'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in ride['points']],
-                    'start_time_str': s_local.strftime('%H:%M:%S'),
-                    'end_time_str': e_local.strftime('%H:%M:%S'),
+                    'start_time_str': s_local.strftime('%b %d, %H:%M'),
+                    'end_time_str': e_local.strftime('%b %d, %H:%M'),
                     'color': colors[ride_idx % len(colors)]
                 })
 
@@ -1178,8 +1178,8 @@ def live_save_map():
                     'start': ride['start'],
                     'end': ride['end'],
                     'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in ride['points']],
-                    'start_time_str': s_local.strftime('%H:%M:%S'),
-                    'end_time_str': e_local.strftime('%H:%M:%S'),
+                    'start_time_str': s_local.strftime('%b %d, %H:%M'),
+                    'end_time_str': e_local.strftime('%b %d, %H:%M'),
                     'color': colors[ride_idx % len(colors)]
                 })
 
