@@ -581,13 +581,23 @@ function _haversineJs(lat1, lon1, lat2, lon2) {
     return d >= 0.01 ? d * 1.05 : 0;
 }
 
-function addRichLayerAnimated(activityType, ridesData, layerStats, onComplete) {
+function addRichLayerAnimated(activityType, ridesData, statsData, onComplete) {
     if (!activityLayers[activityType]) {
         activityLayers[activityType] = { paths: [], markers: [], visible: true };
         layerVisibility[activityType] = true;
     }
 
     var layer = activityLayers[activityType];
+
+    // Store stats for layer control display
+    if (statsData) {
+        layerStats[activityType] = {
+            distance: statsData.distance || 0,
+            duration: statsData.duration || 0,
+            rides: statsData.rides || ridesData.length,
+            points: statsData.points || 0
+        };
+    }
 
     // Flatten all segments across rides
     var segments = [];
@@ -666,6 +676,16 @@ function addBasicLayerAnimated(activityType, points, stats, startTimeStr, endTim
 
     var config = activityConfig[activityType] || activityConfig['all'];
     var layer = activityLayers[activityType];
+
+    // Store stats for layer control display
+    if (stats) {
+        layerStats[activityType] = {
+            distance: stats.distance || 0,
+            duration: stats.duration || 0,
+            rides: stats.rides || 1,
+            points: stats.points || points.length
+        };
+    }
 
     if (points.length === 0) {
         if (onComplete) onComplete();
