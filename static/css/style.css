@@ -404,7 +404,8 @@ body {
     font-style: italic;
 }
 
-#save-status {
+#save-status,
+#live-save-status {
     font-size: 11px;
     margin-top: 4px;
     color: #53cf6e;

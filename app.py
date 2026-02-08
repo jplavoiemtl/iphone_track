@@ -1086,6 +1086,151 @@ def live_stop():
     return jsonify({"success": True})
 
 
+@app.route("/api/live/save-map", methods=["POST"])
+def live_save_map():
+    """Save the current live mode session as an interactive HTML map."""
+    if not _live_cache.get('gps_points'):
+        return jsonify({"success": False, "error": "No live data to save. Start live mode first."}), 400
+
+    gps_points = _live_cache['gps_points']
+    activities = _live_cache.get('activities', {})
+    activity_stats = _live_cache.get('activity_stats', {})
+    detected_tz = _live_cache.get('detected_tz') or pytz.timezone(config.DEFAULT_TIMEZONE)
+    start_timestamp = _live_cache.get('start_timestamp')
+
+    # Determine which layers have data
+    active_layers = []
+    if gps_points:
+        active_layers.append('all')
+    for activity_type in ['car', 'bike', 'other']:
+        if activity_type in activities and activities[activity_type]:
+            active_layers.append(activity_type)
+
+    if not active_layers:
+        return jsonify({"success": False, "error": "No layers to save"}), 400
+
+    # Build layer data and ride data for embedding
+    saved_layers_data = {}
+    saved_rides_data = {}
+
+    ride_colors = {
+        'car': ['#FF0000', '#FF8C00', '#FFD700', '#FF1493', '#8B0000'],
+        'bike': ['#FF8C00', '#228B22', '#1E90FF', '#8B4513', '#4B0082', '#DC143C', '#00CED1'],
+        'other': ['#800080', '#FF00FF', '#FFA500', '#00FFFF', '#8B4513']
+    }
+
+    for layer_type in active_layers:
+        if layer_type == 'all':
+            points = gps_points
+        elif layer_type in activities:
+            points = []
+            for ride in activities[layer_type]:
+                points.extend(ride['points'])
+            points.sort(key=lambda x: x['tst'])
+        else:
+            continue
+
+        if not points:
+            continue
+
+        if layer_type in activity_stats:
+            stats = activity_stats[layer_type]
+            layer_distance = stats.get('total_distance', 0)
+            layer_duration = stats.get('total_duration', 0)
+            layer_rides = stats.get('count', 0)
+        else:
+            layer_distance = 0
+            if len(points) > 1:
+                for i in range(1, len(points)):
+                    d = haversine_with_stationary_detection(
+                        points[i - 1]["lat"], points[i - 1]["lon"],
+                        points[i]["lat"], points[i]["lon"])
+                    layer_distance += d * 1.05
+                layer_duration = points[-1]["tst"] - points[0]["tst"]
+            else:
+                layer_duration = 0
+            layer_rides = sum(activity_stats.get(a, {}).get('count', 0) for a in ['car', 'bike', 'other'])
+
+        start_local = datetime.fromtimestamp(points[0]['tst'], tz=pytz.UTC).astimezone(detected_tz)
+        end_local = datetime.fromtimestamp(points[-1]['tst'], tz=pytz.UTC).astimezone(detected_tz)
+
+        saved_layers_data[layer_type] = {
+            'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in points],
+            'stats': {
+                'distance': layer_distance,
+                'duration': layer_duration,
+                'rides': layer_rides,
+                'points': len(points),
+                'start_time_str': start_local.strftime('%H:%M:%S'),
+                'end_time_str': end_local.strftime('%H:%M:%S')
+            }
+        }
+
+        if layer_type in ['car', 'bike', 'other'] and layer_type in activities:
+            colors = ride_colors.get(layer_type, ['#FFA500'])
+            saved_rides_data[layer_type] = []
+            for ride_idx, ride in enumerate(activities[layer_type]):
+                if not ride['points']:
+                    continue
+                s_local = datetime.fromtimestamp(ride['start'], tz=pytz.UTC).astimezone(detected_tz)
+                e_local = datetime.fromtimestamp(ride['end'], tz=pytz.UTC).astimezone(detected_tz)
+                saved_rides_data[layer_type].append({
+                    'start': ride['start'],
+                    'end': ride['end'],
+                    'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in ride['points']],
+                    'start_time_str': s_local.strftime('%H:%M:%S'),
+                    'end_time_str': e_local.strftime('%H:%M:%S'),
+                    'color': colors[ride_idx % len(colors)]
+                })
+
+    # Generate filename with date range
+    now = datetime.now()
+    if start_timestamp:
+        start_dt = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
+    else:
+        start_dt = datetime.fromtimestamp(gps_points[0]['tst'], tz=pytz.UTC).astimezone(detected_tz)
+    end_dt = now
+
+    start_date_str = start_dt.strftime("%Y-%m-%d")
+    end_date_str = end_dt.strftime("%Y-%m-%d")
+
+    if start_date_str == end_date_str:
+        date_str = start_date_str
+    else:
+        date_str = f"{start_date_str}_to_{end_date_str}"
+
+    timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"interactive_map_live_{date_str}_{timestamp}.html"
+
+    # Generate date range string for display
+    date_range_display = f"{start_dt.strftime('%Y-%m-%d %H:%M')} to {end_dt.strftime('%Y-%m-%d %H:%M')}"
+
+    # Generate self-contained HTML
+    html = _generate_saved_map_html(
+        saved_layers_data, saved_rides_data,
+        date_range=date_range_display,
+        active_layers=active_layers,
+        total_points=len(gps_points),
+        saved_timestamp=now.strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+    # Save to saved_maps directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    saved_maps_dir = os.path.join(script_dir, "saved_maps")
+    os.makedirs(saved_maps_dir, exist_ok=True)
+    saved_path = os.path.join(saved_maps_dir, filename)
+    with open(saved_path, 'w', encoding='utf-8', newline='') as f:
+        f.write(html)
+
+    return jsonify({
+        "success": True,
+        "filename": filename,
+        "path": saved_path,
+        "layers": active_layers,
+        "total_points": len(gps_points)
+    })
+
+
 @app.route("/api/live/status")
 def live_status():
     """Get current live mode status without fetching data.

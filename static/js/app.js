@@ -497,6 +497,37 @@ function saveInteractiveMap() {
     });
 }
 
+function saveLiveMap() {
+    var saveBtn = document.getElementById('live-save-btn');
+    var saveStatus = document.getElementById('live-save-status');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    saveStatus.style.display = 'none';
+
+    fetch('/api/live/save-map', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Map';
+
+        if (data.success) {
+            saveStatus.textContent = 'Saved: ' + data.filename;
+            saveStatus.style.display = 'block';
+        } else {
+            alert('Save failed: ' + data.error);
+        }
+    })
+    .catch(function(err) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Map';
+        alert('Save failed: ' + err.message);
+    });
+}
+
 function updateTrackingInfo() {
     var icons = { car: 'Car', bike: 'Bike', other: 'Other', all: 'All' };
     var layerText = Array.from(activeLayers).map(function(type) {
@@ -590,6 +621,8 @@ function showStartLiveButton() {
     document.getElementById('live-start-btn').style.display = 'block';
     document.getElementById('live-start-btn').textContent = 'Start Live Mode';
     document.getElementById('live-reset-btn').style.display = 'none';
+    document.getElementById('live-save-btn').style.display = 'none';
+    document.getElementById('live-save-status').style.display = 'none';
     document.getElementById('live-start-time').textContent = '--';
     document.getElementById('live-duration').textContent = '';
     document.getElementById('live-total-points').textContent = '0';
@@ -646,6 +679,7 @@ function joinLiveSession() {
     var startBtn = document.getElementById('live-start-btn');
     startBtn.style.display = 'none';
     document.getElementById('live-reset-btn').style.display = 'block';
+    document.getElementById('live-save-btn').style.display = 'block';
 
     // Decide whether to animate: only if animation hasn't been shown yet this session
     var shouldAnimate = !liveAnimationShown;
@@ -727,9 +761,10 @@ function resumeLiveSession() {
         liveData = data;
         updateLiveUI(data);
 
-        // Show reset button, hide start button
+        // Show reset button and save button, hide start button
         startBtn.style.display = 'none';
         document.getElementById('live-reset-btn').style.display = 'block';
+        document.getElementById('live-save-btn').style.display = 'block';
 
         // Load existing track on map (with animation for first view after resume)
         if (data.total_points > 0) {
@@ -888,9 +923,10 @@ function startLiveMode() {
         // Clear activity summary since we're starting fresh
         document.getElementById('live-activity-summary').style.display = 'none';
 
-        // Show reset button, hide start button
+        // Show reset button and save button, hide start button
         startBtn.style.display = 'none';
         document.getElementById('live-reset-btn').style.display = 'block';
+        document.getElementById('live-save-btn').style.display = 'block';
 
         // Start polling
         startLivePolling();
