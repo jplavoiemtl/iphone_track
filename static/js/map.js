@@ -7,7 +7,8 @@ var activityConfig = {
     'car': { color: '#FF4444', icon: '\u{1F697}', name: 'Car' },
     'bike': { color: '#FFD700', icon: '\u{1F6B4}', name: 'Bike' },
     'other': { color: '#4444FF', icon: '\u{1F6B6}', name: 'Other' },
-    'all': { color: '#FFA500', icon: '\u{1F4CD}', name: 'All' }
+    'all': { color: '#FFA500', icon: '\u{1F4CD}', name: 'All' },
+    'live': { color: '#4285F4', icon: '\u{1F4CD}', name: 'Live' }
 };
 
 function initMap() {
@@ -882,7 +883,6 @@ function updateLayerControl() {
 
 var livePolyline = null;
 var livePolylinePath = null;
-var liveLayerConfig = { color: '#4285F4', icon: '\u{1F4CD}', name: 'Live' };
 
 function initLiveLayer() {
     // Create a single polyline for live mode that we can append to
@@ -894,7 +894,7 @@ function initLiveLayer() {
     livePolylinePath = new google.maps.MVCArray();
     livePolyline = new google.maps.Polyline({
         path: livePolylinePath,
-        strokeColor: liveLayerConfig.color,
+        strokeColor: activityConfig['live'].color,
         strokeWeight: 4,
         strokeOpacity: 0.8,
         map: map
@@ -903,11 +903,9 @@ function initLiveLayer() {
     if (!activityLayers['live']) {
         activityLayers['live'] = { paths: [livePolyline], markers: [], visible: true };
         layerVisibility['live'] = true;
-    }
-
-    // Add live config to activityConfig if not present
-    if (!activityConfig['live']) {
-        activityConfig['live'] = liveLayerConfig;
+    } else {
+        // Layer already exists (e.g., from animation) - add livePolyline to it
+        activityLayers['live'].paths.push(livePolyline);
     }
 
     // Update layer control to show the new Live layer
