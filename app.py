@@ -644,10 +644,28 @@ def _generate_saved_map_html(saved_layers_data, saved_rides_data, date_range, ac
                 if (layer.paths.length > 0 || layer.markers.length > 0) {{
                     var cfg = activityConfig[type] || activityConfig['all'];
                     var vis = layerVisibility[type];
+                    var stats = savedLayersData[type] ? savedLayersData[type].stats : null;
+
+                    var container = document.createElement('div');
+                    container.style.cssText = 'margin:8px 0;';
+
                     var item = document.createElement('div');
-                    item.style.cssText = 'display:flex;align-items:center;margin:8px 0;padding:6px;background:rgba(248,248,248,0.8);border-radius:6px;border:1px solid #e0e0e0;';
-                    item.innerHTML = '<span style="font-size:16px;margin-right:8px;">' + cfg.icon + '</span><span style="flex-grow:1;font-weight:500;color:#333;">' + cfg.name + '</span><button onclick="toggleLayer(\\'' + type + '\\')" style="padding:4px 8px;border:none;border-radius:4px;color:white;font-size:10px;font-weight:bold;cursor:pointer;background:' + cfg.color + ';opacity:' + (vis ? '1' : '0.5') + ';">' + (vis ? 'Hide' : 'Show') + '</button>';
-                    list.appendChild(item);
+                    item.style.cssText = 'display:flex;align-items:center;padding:6px;background:rgba(248,248,248,0.8);border-radius:' + (stats ? '6px 6px 0 0' : '6px') + ';border:1px solid #e0e0e0;' + (stats ? 'border-bottom:none;' : '');
+                    item.innerHTML = '<span style="font-size:16px;margin-right:8px;width:20px;text-align:center;">' + cfg.icon + '</span><span style="flex-grow:1;font-weight:500;color:#333;">' + cfg.name + '</span><button onclick="toggleLayer(\\'' + type + '\\')" style="padding:4px 8px;border:none;border-radius:4px;color:white;font-size:10px;font-weight:bold;cursor:pointer;background:' + cfg.color + ';opacity:' + (vis ? '1' : '0.5') + ';">' + (vis ? 'Hide' : 'Show') + '</button>';
+                    container.appendChild(item);
+
+                    if (stats) {{
+                        var durationMins = Math.floor(stats.duration / 60);
+                        var durationStr = durationMins >= 60 ? Math.floor(durationMins / 60) + 'h ' + (durationMins % 60) + 'm' : durationMins + 'm';
+                        var avgSpeed = stats.duration > 0 ? (stats.distance / stats.duration * 3600) : 0;
+
+                        var statsRow = document.createElement('div');
+                        statsRow.style.cssText = 'padding:4px 6px 6px 34px;background:rgba(248,248,248,0.6);border-radius:0 0 6px 6px;border:1px solid #e0e0e0;border-top:none;font-size:11px;color:#666;';
+                        statsRow.innerHTML = stats.distance.toFixed(1) + ' km | ' + durationStr + ' | ' + avgSpeed.toFixed(1) + ' km/h';
+                        container.appendChild(statsRow);
+                    }}
+
+                    list.appendChild(container);
                 }}
             }});
         }}
