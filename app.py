@@ -874,8 +874,24 @@ def live_poll():
     """
     global _live_cache
 
+    # Auto-recover if session was lost (e.g., gunicorn reload) but persisted state exists
     if not _live_cache.get('is_active'):
-        return jsonify({"success": False, "error": "Live mode not active"}), 400
+        saved_state = load_live_state()
+        if saved_state and saved_state.get('start_timestamp'):
+            # Reinitialize cache from persisted state
+            tz_name = saved_state.get('timezone', config.DEFAULT_TIMEZONE)
+            _live_cache = {
+                'is_active': True,
+                'start_timestamp': saved_state['start_timestamp'],
+                'last_poll_timestamp': saved_state['start_timestamp'],  # Will refetch all data
+                'detected_tz': pytz.timezone(tz_name),
+                'gps_points': [],
+                'activities': {},
+                'activity_stats': {},
+                'raw_data': []
+            }
+        else:
+            return jsonify({"success": False, "error": "Live mode not active"}), 400
 
     # Get last_drawn_timestamp from frontend (to know what to send for drawing)
     data = request.get_json() or {}
