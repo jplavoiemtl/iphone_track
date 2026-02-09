@@ -879,6 +879,7 @@ def live_poll():
         saved_state = load_live_state()
         if saved_state and saved_state.get('start_timestamp'):
             # Reinitialize cache from persisted state
+            print("AUTO-RECOVERING live session from persisted state", flush=True)
             tz_name = saved_state.get('timezone', config.DEFAULT_TIMEZONE)
             _live_cache = {
                 'is_active': True,
