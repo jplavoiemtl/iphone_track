@@ -1136,6 +1136,7 @@ function resetLiveMode() {
     if (typeof clearActivityLayer === 'function') {
         clearActivityLayer('car');
         clearActivityLayer('bike');
+        clearActivityLayer('other');
     }
 
     // Reset state for fresh start

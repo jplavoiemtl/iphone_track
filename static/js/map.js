@@ -922,17 +922,24 @@ function appendLivePoint(point) {
 }
 
 function clearLiveLayer() {
-    if (livePolyline) {
-        livePolyline.setMap(null);
-        livePolyline = null;
-        livePolylinePath = null;
-    }
+    // Clear all paths and markers from the map (including animation segments)
     if (activityLayers['live']) {
+        var layer = activityLayers['live'];
+        layer.paths.forEach(function (p) { p.setMap(null); });
+        layer.markers.forEach(function (m) { m.setMap(null); });
         delete activityLayers['live'];
     }
     if (layerVisibility['live']) {
         delete layerVisibility['live'];
     }
+    if (layerStats['live']) {
+        delete layerStats['live'];
+    }
+    // Clear the live polyline reference
+    livePolyline = null;
+    livePolylinePath = null;
+
+    updateLayerControl();
 }
 
 function fitMapToLivePoints(points) {
