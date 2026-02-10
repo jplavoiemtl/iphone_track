@@ -951,7 +951,13 @@ def live_poll():
     _live_cache['gps_points'] = gps_points
     _live_cache['activities'] = activities
     _live_cache['activity_stats'] = activity_stats
-    _live_cache['last_poll_timestamp'] = now
+
+    # Only advance last_poll_timestamp if we received new points.
+    # Set it to the last point's timestamp, not 'now', so late-arriving
+    # data (e.g., batched from iPhone when returning home) will be picked up.
+    if new_points:
+        last_point_tst = max(p.get('tst', 0) for p in new_points)
+        _live_cache['last_poll_timestamp'] = last_point_tst
 
     # Format stats for response
     stats_response = _format_activity_stats(activity_stats)
