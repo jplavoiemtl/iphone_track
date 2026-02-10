@@ -803,6 +803,9 @@ function switchToDateTimeMode() {
         stopAnimation();
     }
 
+    // Clear history navigation state when leaving live mode
+    resetHistoryState();
+
     // Update mode toggle buttons
     document.getElementById('mode-datetime').classList.add('active');
     document.getElementById('mode-live').classList.remove('active');
@@ -833,6 +836,9 @@ function switchToLiveMode() {
     if (typeof stopAnimation === 'function') {
         stopAnimation();
     }
+
+    // Clear any stale history navigation state
+    resetHistoryState();
 
     // Update mode toggle buttons
     document.getElementById('mode-live').classList.add('active');
@@ -1687,13 +1693,14 @@ function exitHistoryMode() {
 }
 
 function resetHistoryState() {
-    // Called when resetting live mode
+    // Called when resetting live mode or switching modes
     historyModeActive = false;
     historyViewIndex = -1;
     historyPoints = [];
     historyCumulativeStats = [];
-    if (typeof removeHistoryMarker === 'function') {
-        removeHistoryMarker();
+    // Clear map.js history state (polyline, marker, livePathsHidden flag)
+    if (typeof clearHistoryState === 'function') {
+        clearHistoryState();
     }
     var panel = document.getElementById('history-panel');
     if (panel) panel.style.display = 'none';
