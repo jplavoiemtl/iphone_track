@@ -805,9 +805,16 @@ function switchToDateTimeMode() {
     document.getElementById('datetime-panel').style.display = 'block';
     document.getElementById('live-panel').style.display = 'none';
 
-    // Clear all layers - each mode has its own clean state
+    // Clear all layers
     if (typeof clearAllLayers === 'function') {
         clearAllLayers();
+    }
+
+    // Restore previously active datetime layers (if any)
+    if (activeLayers.size > 0 && detectionData) {
+        activeLayers.forEach(function(type) {
+            loadLayer(type);  // Draw instantly without animation
+        });
     }
 }
 
