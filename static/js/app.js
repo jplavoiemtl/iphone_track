@@ -1609,6 +1609,14 @@ function updateHistoryButtons() {
     if (liveBtn) {
         liveBtn.style.display = historyModeActive ? 'inline-block' : 'none';
     }
+
+    // Disable Live layer toggle button when in history mode
+    var liveLayerToggle = document.getElementById('live-layer-toggle');
+    if (liveLayerToggle) {
+        liveLayerToggle.disabled = historyModeActive;
+        liveLayerToggle.style.opacity = historyModeActive ? '0.4' : '1';
+        liveLayerToggle.style.cursor = historyModeActive ? 'not-allowed' : 'pointer';
+    }
 }
 
 function navigateHistory(delta) {

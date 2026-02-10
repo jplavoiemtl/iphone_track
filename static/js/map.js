@@ -867,10 +867,11 @@ function updateLayerControl() {
             // Layer header row
             var item = document.createElement('div');
             item.style.cssText = 'display:flex;align-items:center;padding:6px;background:rgba(248,248,248,0.8);border-radius:6px 6px ' + (stats ? '0 0' : '6px 6px') + ';border:1px solid #e0e0e0;' + (stats ? 'border-bottom:none;' : '');
+            var buttonId = activityType === 'live' ? 'id="live-layer-toggle"' : '';
             item.innerHTML =
                 '<span style="font-size:16px;margin-right:8px;width:20px;text-align:center;">' + config.icon + '</span>' +
                 '<span style="flex-grow:1;font-weight:500;color:#333;">' + config.name + '</span>' +
-                '<button onclick="toggleLayer(\'' + activityType + '\')" style="padding:4px 8px;border:none;border-radius:4px;color:white;font-size:10px;font-weight:bold;cursor:pointer;background-color:' + config.color + ';opacity:' + (isVisible ? '1' : '0.5') + ';">' +
+                '<button ' + buttonId + ' onclick="toggleLayer(\'' + activityType + '\')" style="padding:4px 8px;border:none;border-radius:4px;color:white;font-size:10px;font-weight:bold;cursor:pointer;background-color:' + config.color + ';opacity:' + (isVisible ? '1' : '0.5') + ';">' +
                 (isVisible ? 'Hide' : 'Show') + '</button>';
             container.appendChild(item);
 
