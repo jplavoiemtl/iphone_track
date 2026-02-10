@@ -980,39 +980,70 @@ function fitMapToLivePoints(points) {
 // History Navigation - Polyline Manipulation
 // =============================================================================
 
-var livePolylineFullPath = [];  // Store full path for restoration
-var historyMarker = null;       // Marker showing current history position
+var historyMarker = null;           // Marker showing current history position
+var historyPolyline = null;         // Temporary polyline for history view
+var livePathsHidden = false;        // Track if live paths are hidden
 
 function truncateLivePolyline(toIndex) {
-    if (!livePolyline || !livePolylinePath) return;
+    // Hide all live layer paths and show a temporary truncated polyline
 
-    // Store full path if not already stored
-    if (livePolylineFullPath.length === 0) {
-        for (var i = 0; i < livePolylinePath.getLength(); i++) {
-            livePolylineFullPath.push(livePolylinePath.getAt(i));
+    // Get points from the history (stored in app.js historyPoints)
+    var points = (typeof historyPoints !== 'undefined') ? historyPoints : [];
+    if (points.length === 0) return;
+
+    // Hide all live paths if not already hidden
+    if (!livePathsHidden) {
+        if (activityLayers['live']) {
+            var layer = activityLayers['live'];
+            layer.paths.forEach(function(p) { p.setMap(null); });
         }
+        // Also hide the livePolyline if it exists
+        if (livePolyline) {
+            livePolyline.setMap(null);
+        }
+        livePathsHidden = true;
     }
 
-    // Clear current path and add points up to toIndex
-    livePolylinePath.clear();
-    for (var j = 0; j <= toIndex && j < livePolylineFullPath.length; j++) {
-        livePolylinePath.push(livePolylineFullPath[j]);
+    // Build path up to toIndex
+    var pathPoints = [];
+    for (var i = 0; i <= toIndex && i < points.length; i++) {
+        pathPoints.push({ lat: points[i].lat, lng: points[i].lng });
+    }
+
+    // Create or update history polyline
+    if (!historyPolyline) {
+        historyPolyline = new google.maps.Polyline({
+            path: pathPoints,
+            strokeColor: activityConfig['live'].color,
+            strokeWeight: 4,
+            strokeOpacity: 0.8,
+            map: map
+        });
+    } else {
+        historyPolyline.setPath(pathPoints);
+        historyPolyline.setMap(map);
     }
 }
 
 function restoreLivePolyline() {
-    if (!livePolyline || !livePolylinePath) return;
-
-    // Restore full path
-    if (livePolylineFullPath.length > 0) {
-        livePolylinePath.clear();
-        for (var i = 0; i < livePolylineFullPath.length; i++) {
-            livePolylinePath.push(livePolylineFullPath[i]);
-        }
+    // Remove history polyline and restore all live paths
+    if (historyPolyline) {
+        historyPolyline.setMap(null);
+        historyPolyline = null;
     }
 
-    // Clear stored full path
-    livePolylineFullPath = [];
+    // Show all live paths again
+    if (livePathsHidden) {
+        if (activityLayers['live']) {
+            var layer = activityLayers['live'];
+            layer.paths.forEach(function(p) { p.setMap(map); });
+        }
+        // Also show the livePolyline if it exists
+        if (livePolyline) {
+            livePolyline.setMap(map);
+        }
+        livePathsHidden = false;
+    }
 }
 
 function updateHistoryMarker(lat, lng) {
@@ -1045,6 +1076,11 @@ function removeHistoryMarker() {
 }
 
 function clearHistoryState() {
-    livePolylineFullPath = [];
+    // Remove history polyline
+    if (historyPolyline) {
+        historyPolyline.setMap(null);
+        historyPolyline = null;
+    }
+    livePathsHidden = false;
     removeHistoryMarker();
 }
