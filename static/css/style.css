@@ -792,3 +792,27 @@ body {
         /* Keep visible while sliding out */
     }
 }
+
+/* ============================
+   History Navigation Panel
+   ============================ */
+.history-label {
+    font-size: 13px;
+}
+
+.history-label.live {
+    color: #4285F4;
+}
+
+.history-label.viewing {
+    color: #FF8C00;
+}
+
+#history-panel button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+#history-panel button:not(:disabled):hover {
+    background: #e0e0e0;
+}

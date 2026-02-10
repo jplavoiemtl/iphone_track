@@ -827,6 +827,22 @@ function createLayerControl() {
         '<div style="background:rgba(255,255,255,0.95);border:2px solid #666;border-radius:8px;margin:10px;padding:12px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);min-width:220px;">' +
         '<div style="font-weight:bold;margin-bottom:10px;color:#333;font-size:14px;text-align:center;border-bottom:1px solid #ddd;padding-bottom:8px;">Active Layers</div>' +
         '<div id="mapLayerList"></div>' +
+        '<div id="history-panel" style="display:none;border-top:1px solid #ddd;margin-top:10px;padding-top:10px;">' +
+            '<div id="history-label" class="history-label live" style="font-weight:bold;color:#333;margin-bottom:6px;"></div>' +
+            '<div id="history-time" style="color:#666;margin-bottom:4px;"></div>' +
+            '<div style="color:#555;font-size:11px;margin-bottom:8px;">' +
+                '<span id="history-distance">0 km</span> | ' +
+                '<span id="history-duration">0m</span> | ' +
+                '<span id="history-speed">0 km/h</span>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:center;gap:4px;">' +
+                '<button id="history-back10" onclick="navigateHistory(-10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 10 points">««</button>' +
+                '<button id="history-back" onclick="navigateHistory(-1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 1 point">«</button>' +
+                '<button id="history-live" onclick="exitHistoryMode()" style="display:none;padding:4px 10px;border:none;border-radius:4px;background:#4285F4;color:white;cursor:pointer;font-size:11px;font-weight:bold;">LIVE</button>' +
+                '<button id="history-forward" onclick="navigateHistory(1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 1 point">»</button>' +
+                '<button id="history-forward10" onclick="navigateHistory(10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 10 points">»»</button>' +
+            '</div>' +
+        '</div>' +
         '</div>';
     map.controls[google.maps.ControlPosition.TOP_LEFT].push(controlDiv);
 }
@@ -939,6 +955,9 @@ function clearLiveLayer() {
     livePolyline = null;
     livePolylinePath = null;
 
+    // Clear history navigation state
+    clearHistoryState();
+
     updateLayerControl();
 }
 
@@ -955,4 +974,77 @@ function fitMapToLivePoints(points) {
     google.maps.event.addListenerOnce(map, 'bounds_changed', function() {
         if (map.getZoom() > 16) map.setZoom(16);
     });
+}
+
+// =============================================================================
+// History Navigation - Polyline Manipulation
+// =============================================================================
+
+var livePolylineFullPath = [];  // Store full path for restoration
+var historyMarker = null;       // Marker showing current history position
+
+function truncateLivePolyline(toIndex) {
+    if (!livePolyline || !livePolylinePath) return;
+
+    // Store full path if not already stored
+    if (livePolylineFullPath.length === 0) {
+        for (var i = 0; i < livePolylinePath.getLength(); i++) {
+            livePolylineFullPath.push(livePolylinePath.getAt(i));
+        }
+    }
+
+    // Clear current path and add points up to toIndex
+    livePolylinePath.clear();
+    for (var j = 0; j <= toIndex && j < livePolylineFullPath.length; j++) {
+        livePolylinePath.push(livePolylineFullPath[j]);
+    }
+}
+
+function restoreLivePolyline() {
+    if (!livePolyline || !livePolylinePath) return;
+
+    // Restore full path
+    if (livePolylineFullPath.length > 0) {
+        livePolylinePath.clear();
+        for (var i = 0; i < livePolylineFullPath.length; i++) {
+            livePolylinePath.push(livePolylineFullPath[i]);
+        }
+    }
+
+    // Clear stored full path
+    livePolylineFullPath = [];
+}
+
+function updateHistoryMarker(lat, lng) {
+    if (!map) return;
+
+    if (!historyMarker) {
+        historyMarker = new google.maps.Marker({
+            position: { lat: lat, lng: lng },
+            map: map,
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: '#4285F4',
+                fillOpacity: 1,
+                strokeColor: '#FFFFFF',
+                strokeWeight: 3
+            },
+            zIndex: 2000
+        });
+    } else {
+        historyMarker.setPosition({ lat: lat, lng: lng });
+        historyMarker.setMap(map);
+    }
+}
+
+function removeHistoryMarker() {
+    if (historyMarker) {
+        historyMarker.setMap(null);
+    }
+}
+
+function clearHistoryState() {
+    livePolylineFullPath = [];
+    removeHistoryMarker();
 }

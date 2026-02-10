@@ -17,6 +17,12 @@ var liveRidesData = { car: [], bike: [], other: [] };
 // Track if live animation was already shown this session (for hybrid animation)
 var liveAnimationShown = false;
 
+// History navigation state
+var historyModeActive = false;      // Are we viewing history?
+var historyViewIndex = -1;          // Current view point index (-1 = live/latest)
+var historyPoints = [];             // All live points for navigation
+var historyCumulativeStats = [];    // Pre-calculated stats per point: [{tst, distance, duration, pointCount}]
+
 // Toggle past activities visibility (live mode)
 function togglePastActivities() {
     var summary = document.getElementById('live-activity-summary');
@@ -1004,11 +1010,20 @@ function pollLiveData() {
         // Draw points to the simple live polyline (for real-time updates)
         // Note: Activity points will be redrawn by refreshLiveActivityLayers
         if (data.points_to_draw && data.points_to_draw.length > 0) {
-            appendLivePoints(data.points_to_draw);
+            // Only append to map if not in history mode
+            if (!historyModeActive) {
+                appendLivePoints(data.points_to_draw);
+            }
             // Update lastDrawnTimestamp to the last point we drew
             var lastPoint = data.points_to_draw[data.points_to_draw.length - 1];
             lastDrawnTimestamp = lastPoint.tst;
+
+            // Add points to history tracking and calculate cumulative stats
+            addPointsToHistory(data.points_to_draw);
         }
+
+        // Update history panel display
+        updateHistoryPanel();
     })
     .catch(function(err) {
         console.error('Poll error:', err.message);
@@ -1151,6 +1166,7 @@ function resetLiveMode() {
     liveRideCounts = { car: 0, bike: 0, other: 0 };
     liveRidesData = { car: [], bike: [], other: [] };
     liveAnimationShown = false;  // Reset so next data will animate
+    resetHistoryState();  // Clear history navigation state
 
     // Hide tracking info and current activity until we have data
     var trackingInfo = document.getElementById('live-tracking-info');
@@ -1372,6 +1388,9 @@ function loadLiveTrack(animate, onComplete) {
         }
 
         if (data.points && data.points.length > 0) {
+            // Initialize history with existing points
+            initializeHistoryFromPoints(data.points);
+
             if (animate && typeof addBasicLayerAnimated === 'function') {
                 // Set up animation progress callback for live stats
                 setupLiveAnimationProgress();
@@ -1382,6 +1401,7 @@ function loadLiveTrack(animate, onComplete) {
                         // Animation complete - clear callback and update timestamp
                         clearLiveAnimationProgress();
                         lastDrawnTimestamp = data.points[data.points.length - 1].tst;
+                        updateHistoryPanel();  // Show history panel after animation
                         if (onComplete) onComplete();
                     });
             } else {
@@ -1392,6 +1412,7 @@ function loadLiveTrack(animate, onComplete) {
                 if (data.stats) {
                     updateLiveTrackingStats(data.stats.distance, data.stats.duration, data.end_time_str);
                 }
+                updateHistoryPanel();  // Show history panel
                 if (onComplete) onComplete();
             }
         } else {
@@ -1428,8 +1449,8 @@ function appendLivePoints(newPoints) {
         for (var i = 0; i < newPoints.length; i++) {
             appendLivePoint(newPoints[i]);
         }
-        // Pan to latest point
-        if (newPoints.length > 0) {
+        // Pan to latest point (only if not in history mode)
+        if (newPoints.length > 0 && !historyModeActive) {
             var last = newPoints[newPoints.length - 1];
             if (typeof map !== 'undefined' && map) {
                 map.panTo({ lat: last.lat, lng: last.lng });
@@ -1438,5 +1459,271 @@ function appendLivePoints(newPoints) {
     } else {
         // Fallback - reload entire track (no animation since we're already tracking)
         loadLiveTrack(false);
+    }
+}
+
+// =============================================================================
+// History Navigation Functions
+// =============================================================================
+
+function addPointsToHistory(newPoints) {
+    // Add points to history array and calculate cumulative stats
+    for (var i = 0; i < newPoints.length; i++) {
+        var point = newPoints[i];
+        historyPoints.push(point);
+
+        // Calculate cumulative stats
+        var pointIndex = historyPoints.length - 1;
+        var cumulativeDistance = 0;
+        var duration = 0;
+
+        if (pointIndex > 0) {
+            // Get previous cumulative distance
+            cumulativeDistance = historyCumulativeStats[pointIndex - 1].distance;
+
+            // Add distance from previous point to this one
+            var prevPoint = historyPoints[pointIndex - 1];
+            var segmentDist = haversineDistance(
+                prevPoint.lat, prevPoint.lng,
+                point.lat, point.lng
+            );
+            if (segmentDist >= 0.01) {  // Only count if >= 10 meters
+                cumulativeDistance += segmentDist * 1.05;  // 5% road factor
+            }
+
+            // Duration from first point
+            duration = point.tst - historyPoints[0].tst;
+        }
+
+        historyCumulativeStats.push({
+            tst: point.tst,
+            distance: cumulativeDistance,
+            duration: duration,
+            pointCount: pointIndex + 1
+        });
+    }
+}
+
+function haversineDistance(lat1, lng1, lat2, lng2) {
+    // Calculate distance between two points in km
+    var R = 6371;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLng = (lng2 - lng1) * Math.PI / 180;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function updateHistoryPanel() {
+    var panel = document.getElementById('history-panel');
+    if (!panel) return;
+
+    var totalPoints = historyPoints.length;
+    if (totalPoints === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+
+    // Determine current view index
+    var viewIndex = historyModeActive ? historyViewIndex : totalPoints - 1;
+    var stats = historyCumulativeStats[viewIndex];
+    var point = historyPoints[viewIndex];
+
+    if (!stats || !point) return;
+
+    // Update label (LIVE vs VIEWING)
+    var label = document.getElementById('history-label');
+    if (label) {
+        if (historyModeActive) {
+            label.textContent = '📍 VIEWING • Point ' + (viewIndex + 1) + '/' + totalPoints;
+            label.className = 'history-label viewing';
+        } else {
+            label.textContent = '📍 LIVE • Point ' + totalPoints + '/' + totalPoints;
+            label.className = 'history-label live';
+        }
+    }
+
+    // Update timestamp
+    var timeEl = document.getElementById('history-time');
+    if (timeEl) {
+        var d = new Date(point.tst * 1000);
+        var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        timeEl.textContent = months[d.getMonth()] + ' ' + d.getDate() + ', ' +
+            d.getHours().toString().padStart(2, '0') + ':' +
+            d.getMinutes().toString().padStart(2, '0');
+    }
+
+    // Update stats
+    var distanceEl = document.getElementById('history-distance');
+    if (distanceEl) {
+        distanceEl.textContent = stats.distance.toFixed(2) + ' km';
+    }
+
+    var durationEl = document.getElementById('history-duration');
+    if (durationEl) {
+        var hours = Math.floor(stats.duration / 3600);
+        var mins = Math.floor((stats.duration % 3600) / 60);
+        var secs = stats.duration % 60;
+        if (hours > 0) {
+            durationEl.textContent = hours + 'h ' + mins + 'm';
+        } else {
+            durationEl.textContent = mins + 'm ' + secs + 's';
+        }
+    }
+
+    var speedEl = document.getElementById('history-speed');
+    if (speedEl) {
+        var avgSpeed = stats.duration > 0 ? (stats.distance / stats.duration * 3600) : 0;
+        speedEl.textContent = avgSpeed.toFixed(1) + ' km/h';
+    }
+
+    // Update button states
+    updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+    var totalPoints = historyPoints.length;
+    var viewIndex = historyModeActive ? historyViewIndex : totalPoints - 1;
+
+    var backBtn = document.getElementById('history-back');
+    var back10Btn = document.getElementById('history-back10');
+    var fwdBtn = document.getElementById('history-forward');
+    var fwd10Btn = document.getElementById('history-forward10');
+    var liveBtn = document.getElementById('history-live');
+
+    // Back buttons: disabled at first point
+    var atStart = viewIndex <= 0;
+    if (backBtn) backBtn.disabled = atStart;
+    if (back10Btn) back10Btn.disabled = atStart;
+
+    // Forward buttons: disabled at last point (live mode)
+    var atEnd = viewIndex >= totalPoints - 1;
+    if (fwdBtn) fwdBtn.disabled = atEnd;
+    if (fwd10Btn) fwd10Btn.disabled = atEnd;
+
+    // Live button: only show in history mode
+    if (liveBtn) {
+        liveBtn.style.display = historyModeActive ? 'inline-block' : 'none';
+    }
+}
+
+function navigateHistory(delta) {
+    var totalPoints = historyPoints.length;
+    if (totalPoints === 0) return;
+
+    if (!historyModeActive) {
+        // Entering history mode
+        historyModeActive = true;
+        historyViewIndex = totalPoints - 1;
+    }
+
+    // Apply delta
+    historyViewIndex += delta;
+
+    // Clamp to valid range
+    if (historyViewIndex < 0) historyViewIndex = 0;
+    if (historyViewIndex >= totalPoints) {
+        // Reached the end - exit history mode
+        exitHistoryMode();
+        return;
+    }
+
+    // Update polyline display
+    if (typeof truncateLivePolyline === 'function') {
+        truncateLivePolyline(historyViewIndex);
+    }
+
+    // Update position marker
+    var point = historyPoints[historyViewIndex];
+    if (point && typeof updateHistoryMarker === 'function') {
+        updateHistoryMarker(point.lat, point.lng);
+    }
+
+    // Pan map to current position
+    if (point && typeof map !== 'undefined' && map) {
+        map.panTo({ lat: point.lat, lng: point.lng });
+    }
+
+    // Update panel display
+    updateHistoryPanel();
+}
+
+function exitHistoryMode() {
+    historyModeActive = false;
+    historyViewIndex = -1;
+
+    // Restore full polyline
+    if (typeof restoreLivePolyline === 'function') {
+        restoreLivePolyline();
+    }
+
+    // Remove position marker
+    if (typeof removeHistoryMarker === 'function') {
+        removeHistoryMarker();
+    }
+
+    // Pan to latest point
+    if (historyPoints.length > 0) {
+        var last = historyPoints[historyPoints.length - 1];
+        if (typeof map !== 'undefined' && map) {
+            map.panTo({ lat: last.lat, lng: last.lng });
+        }
+    }
+
+    // Update panel display
+    updateHistoryPanel();
+}
+
+function resetHistoryState() {
+    // Called when resetting live mode
+    historyModeActive = false;
+    historyViewIndex = -1;
+    historyPoints = [];
+    historyCumulativeStats = [];
+    if (typeof removeHistoryMarker === 'function') {
+        removeHistoryMarker();
+    }
+    var panel = document.getElementById('history-panel');
+    if (panel) panel.style.display = 'none';
+}
+
+function initializeHistoryFromPoints(points) {
+    // Initialize history arrays from existing points (when joining/resuming)
+    historyPoints = [];
+    historyCumulativeStats = [];
+    historyModeActive = false;
+    historyViewIndex = -1;
+
+    if (!points || points.length === 0) return;
+
+    var cumulativeDistance = 0;
+
+    for (var i = 0; i < points.length; i++) {
+        var point = points[i];
+        historyPoints.push(point);
+
+        if (i > 0) {
+            var prevPoint = points[i - 1];
+            var segmentDist = haversineDistance(
+                prevPoint.lat, prevPoint.lng,
+                point.lat, point.lng
+            );
+            if (segmentDist >= 0.01) {
+                cumulativeDistance += segmentDist * 1.05;
+            }
+        }
+
+        var duration = i > 0 ? (point.tst - points[0].tst) : 0;
+
+        historyCumulativeStats.push({
+            tst: point.tst,
+            distance: cumulativeDistance,
+            duration: duration,
+            pointCount: i + 1
+        });
     }
 }
