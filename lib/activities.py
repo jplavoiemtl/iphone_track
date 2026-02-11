@@ -1,6 +1,7 @@
 from lib.geo import (
     haversine,
     haversine_with_stationary_detection,
+    calculate_track_distance,
     find_movement_boundaries,
     detect_stationary_gap,
 )
@@ -124,16 +125,7 @@ def process_other_ride(ride_points, min_duration_seconds):
         movement_duration = movement_end_time - movement_start_time
 
         if movement_duration >= min_duration_seconds:
-            ride_distance = 0
-            for j in range(1, len(ride_points)):
-                prev_point = ride_points[j - 1]
-                curr_point = ride_points[j]
-                distance = haversine_with_stationary_detection(
-                    prev_point["lat"], prev_point["lon"],
-                    curr_point["lat"], curr_point["lon"]
-                )
-                ride_distance += distance * 1.05
-
+            ride_distance = calculate_track_distance(ride_points)
             if ride_distance >= 0.1:
                 return {
                     'start': movement_start_time,
@@ -144,16 +136,7 @@ def process_other_ride(ride_points, min_duration_seconds):
     else:
         fallback_duration = ride_points[-1]['tst'] - ride_points[0]['tst']
         if fallback_duration >= min_duration_seconds:
-            ride_distance = 0
-            for j in range(1, len(ride_points)):
-                prev_point = ride_points[j - 1]
-                curr_point = ride_points[j]
-                distance = haversine_with_stationary_detection(
-                    prev_point["lat"], prev_point["lon"],
-                    curr_point["lat"], curr_point["lon"]
-                )
-                ride_distance += distance * 1.05
-
+            ride_distance = calculate_track_distance(ride_points)
             if ride_distance >= 0.1:
                 return {
                     'start': ride_points[0]['tst'],
@@ -249,17 +232,8 @@ def calculate_activity_stats(activities):
 
             for activity in activity_data:
                 points = activity['points']
-                activity_distance = 0
+                activity_distance = calculate_track_distance(points)
                 activity_duration = activity['end'] - activity['start']
-
-                if len(points) > 1:
-                    for j in range(1, len(points)):
-                        prev_point = points[j - 1]
-                        curr_point = points[j]
-                        distance = haversine_with_stationary_detection(
-                            prev_point["lat"], prev_point["lon"],
-                            curr_point["lat"], curr_point["lon"])
-                        activity_distance += distance * 1.05
 
                 total_distance += activity_distance
                 total_duration += activity_duration

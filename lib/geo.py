@@ -69,6 +69,20 @@ def detect_stationary_gap(points, gap_threshold_seconds, stationary_threshold_me
     return 0
 
 
+ROAD_FACTOR = 1.05
+
+
+def calculate_track_distance(points, lat_key="lat", lon_key="lon"):
+    """Calculate total road-adjusted distance for a list of GPS points."""
+    total = 0
+    for i in range(1, len(points)):
+        d = haversine_with_stationary_detection(
+            points[i - 1][lat_key], points[i - 1][lon_key],
+            points[i][lat_key], points[i][lon_key])
+        total += d * ROAD_FACTOR
+    return total
+
+
 def get_timezone_from_gps(lat, lon):
     tf = TimezoneFinder()
     timezone_str = tf.timezone_at(lat=lat, lng=lon)

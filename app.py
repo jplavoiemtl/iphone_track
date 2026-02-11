@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 
 import config
-from lib.geo import get_timezone_from_gps, haversine_with_stationary_detection, format_time
+from lib.geo import get_timezone_from_gps, calculate_track_distance, format_time
 from lib.owntracks import fetch_owntracks_data
 from lib.activities import parse_activities, calculate_activity_stats
 from lib.live import save_live_state, load_live_state, clear_live_state
@@ -158,14 +158,7 @@ def detect_activities():
                 start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
                 end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
 
-                ride_distance = 0
-                if len(ride['points']) > 1:
-                    for j in range(1, len(ride['points'])):
-                        prev = ride['points'][j - 1]
-                        curr = ride['points'][j]
-                        distance = haversine_with_stationary_detection(
-                            prev["lat"], prev["lon"], curr["lat"], curr["lon"])
-                        ride_distance += distance * 1.05
+                ride_distance = calculate_track_distance(ride['points'])
 
                 ride_duration = end_timestamp - start_timestamp
                 avg_speed = (ride_distance / ride_duration * 3600) if ride_duration > 0 else 0
@@ -218,17 +211,8 @@ def get_track_data(activity_type):
         if not gps_points:
             return jsonify({"success": False, "error": "No GPS points available"}), 404
 
-        layer_distance = 0
-        if len(gps_points) > 1:
-            for i in range(1, len(gps_points)):
-                prev = gps_points[i - 1]
-                curr = gps_points[i]
-                distance = haversine_with_stationary_detection(
-                    prev["lat"], prev["lon"], curr["lat"], curr["lon"])
-                layer_distance += distance * 1.05
-            layer_duration = gps_points[-1]["tst"] - gps_points[0]["tst"]
-        else:
-            layer_duration = 0
+        layer_distance = calculate_track_distance(gps_points)
+        layer_duration = gps_points[-1]["tst"] - gps_points[0]["tst"] if len(gps_points) > 1 else 0
 
         start_local = datetime.fromtimestamp(gps_points[0]['tst'], tz=pytz.UTC).astimezone(detected_tz)
         end_local = datetime.fromtimestamp(gps_points[-1]['tst'], tz=pytz.UTC).astimezone(detected_tz)
@@ -265,14 +249,7 @@ def get_track_data(activity_type):
         start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
         end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
 
-        ride_distance = 0
-        if len(ride['points']) > 1:
-            for j in range(1, len(ride['points'])):
-                prev = ride['points'][j - 1]
-                curr = ride['points'][j]
-                distance = haversine_with_stationary_detection(
-                    prev["lat"], prev["lon"], curr["lat"], curr["lon"])
-                ride_distance += distance * 1.05
+        ride_distance = calculate_track_distance(ride['points'])
 
         ride_duration = end_timestamp - start_timestamp
         avg_speed = (ride_distance / ride_duration * 3600) if ride_duration > 0 else 0
@@ -355,16 +332,8 @@ def save_map():
             layer_duration = stats.get('total_duration', 0)
             layer_rides = stats.get('count', 0)
         else:
-            layer_distance = 0
-            if len(points) > 1:
-                for i in range(1, len(points)):
-                    d = haversine_with_stationary_detection(
-                        points[i - 1]["lat"], points[i - 1]["lon"],
-                        points[i]["lat"], points[i]["lon"])
-                    layer_distance += d * 1.05
-                layer_duration = points[-1]["tst"] - points[0]["tst"]
-            else:
-                layer_duration = 0
+            layer_distance = calculate_track_distance(points)
+            layer_duration = points[-1]["tst"] - points[0]["tst"] if len(points) > 1 else 0
             layer_rides = sum(activity_stats.get(a, {}).get('count', 0) for a in ['car', 'bike', 'other'])
 
         start_local = datetime.fromtimestamp(points[0]['tst'], tz=pytz.UTC).astimezone(detected_tz)
@@ -981,16 +950,10 @@ def live_poll():
     ]
 
     # Calculate total distance and duration for tracking display
-    total_distance = 0
+    total_distance = calculate_track_distance(gps_points)
     total_duration = 0
     last_point_time = None
     if len(gps_points) > 1:
-        for i in range(1, len(gps_points)):
-            prev = gps_points[i - 1]
-            curr = gps_points[i]
-            distance = haversine_with_stationary_detection(
-                prev["lat"], prev["lon"], curr["lat"], curr["lon"])
-            total_distance += distance * 1.05
         total_duration = gps_points[-1]["tst"] - gps_points[0]["tst"]
         # Format last point time
         last_tst = gps_points[-1]["tst"]
@@ -1033,17 +996,8 @@ def get_live_track_data(activity_type):
         if not gps_points:
             return jsonify({"success": False, "error": "No GPS points available"}), 404
 
-        layer_distance = 0
-        if len(gps_points) > 1:
-            for i in range(1, len(gps_points)):
-                prev = gps_points[i - 1]
-                curr = gps_points[i]
-                distance = haversine_with_stationary_detection(
-                    prev["lat"], prev["lon"], curr["lat"], curr["lon"])
-                layer_distance += distance * 1.05
-            layer_duration = gps_points[-1]["tst"] - gps_points[0]["tst"]
-        else:
-            layer_duration = 0
+        layer_distance = calculate_track_distance(gps_points)
+        layer_duration = gps_points[-1]["tst"] - gps_points[0]["tst"] if len(gps_points) > 1 else 0
 
         start_local = datetime.fromtimestamp(gps_points[0]['tst'], tz=pytz.UTC).astimezone(detected_tz)
         end_local = datetime.fromtimestamp(gps_points[-1]['tst'], tz=pytz.UTC).astimezone(detected_tz)
@@ -1080,14 +1034,7 @@ def get_live_track_data(activity_type):
         start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
         end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
 
-        ride_distance = 0
-        if len(ride['points']) > 1:
-            for j in range(1, len(ride['points'])):
-                prev = ride['points'][j - 1]
-                curr = ride['points'][j]
-                distance = haversine_with_stationary_detection(
-                    prev["lat"], prev["lon"], curr["lat"], curr["lon"])
-                ride_distance += distance * 1.05
+        ride_distance = calculate_track_distance(ride['points'])
 
         ride_duration = end_timestamp - start_timestamp
         avg_speed = (ride_distance / ride_duration * 3600) if ride_duration > 0 else 0
@@ -1184,16 +1131,8 @@ def live_save_map():
             layer_duration = stats.get('total_duration', 0)
             layer_rides = stats.get('count', 0)
         else:
-            layer_distance = 0
-            if len(points) > 1:
-                for i in range(1, len(points)):
-                    d = haversine_with_stationary_detection(
-                        points[i - 1]["lat"], points[i - 1]["lon"],
-                        points[i]["lat"], points[i]["lon"])
-                    layer_distance += d * 1.05
-                layer_duration = points[-1]["tst"] - points[0]["tst"]
-            else:
-                layer_duration = 0
+            layer_distance = calculate_track_distance(points)
+            layer_duration = points[-1]["tst"] - points[0]["tst"] if len(points) > 1 else 0
             layer_rides = sum(activity_stats.get(a, {}).get('count', 0) for a in ['car', 'bike', 'other'])
 
         start_local = datetime.fromtimestamp(points[0]['tst'], tz=pytz.UTC).astimezone(detected_tz)
