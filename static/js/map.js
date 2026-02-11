@@ -838,7 +838,7 @@ function createLayerControl() {
             '<div style="display:flex;justify-content:center;gap:4px;">' +
                 '<button id="history-back10" onclick="navigateHistory(-10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 10 points">««</button>' +
                 '<button id="history-back" onclick="navigateHistory(-1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 1 point">«</button>' +
-                '<button id="history-live" onclick="exitHistoryMode()" style="display:none;padding:4px 10px;border:none;border-radius:4px;background:#4285F4;color:white;cursor:pointer;font-size:11px;font-weight:bold;">LIVE</button>' +
+                '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:4px 10px;border:none;border-radius:4px;background:#4285F4;color:white;cursor:pointer;font-size:11px;font-weight:bold;">LIVE</button>' +
                 '<button id="history-forward" onclick="navigateHistory(1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 1 point">»</button>' +
                 '<button id="history-forward10" onclick="navigateHistory(10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 10 points">»»</button>' +
             '</div>' +

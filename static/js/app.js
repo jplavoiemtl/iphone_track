@@ -1611,9 +1611,17 @@ function updateHistoryButtons() {
     if (fwdBtn) fwdBtn.disabled = atEnd;
     if (fwd10Btn) fwd10Btn.disabled = atEnd;
 
-    // Live button: only show in history mode
+    // Live/Old button: show "Old" when at live position, "LIVE" when in history
     if (liveBtn) {
-        liveBtn.style.display = historyModeActive ? 'inline-block' : 'none';
+        if (historyModeActive) {
+            liveBtn.textContent = 'LIVE';
+            liveBtn.style.display = 'inline-block';
+        } else if (totalPoints > 1) {
+            liveBtn.textContent = 'OLD';
+            liveBtn.style.display = 'inline-block';
+        } else {
+            liveBtn.style.display = 'none';
+        }
     }
 
     // Disable Live layer toggle button when in history mode
@@ -1690,6 +1698,40 @@ function exitHistoryMode() {
 
     // Update panel display
     updateHistoryPanel();
+}
+
+function handleHistoryJumpButton() {
+    // Handles both "Old" (jump to start) and "Live" (jump to end) button clicks
+    if (historyModeActive) {
+        // In history mode - jump to live (latest point)
+        exitHistoryMode();
+    } else {
+        // At live position - jump to first point (oldest)
+        var totalPoints = historyPoints.length;
+        if (totalPoints <= 1) return;
+
+        historyModeActive = true;
+        historyViewIndex = 0;
+
+        // Update polyline display
+        if (typeof truncateLivePolyline === 'function') {
+            truncateLivePolyline(0);
+        }
+
+        // Update position marker
+        var point = historyPoints[0];
+        if (point && typeof updateHistoryMarker === 'function') {
+            updateHistoryMarker(point.lat, point.lng);
+        }
+
+        // Pan map to first point
+        if (point && typeof map !== 'undefined' && map) {
+            map.panTo({ lat: point.lat, lng: point.lng });
+        }
+
+        // Update panel display
+        updateHistoryPanel();
+    }
 }
 
 function resetHistoryState() {
