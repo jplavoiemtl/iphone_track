@@ -34,7 +34,7 @@ def fetch_owntracks_data(start_date_str, end_date_str, start_time="00:00", end_t
             "to": end_utc
         }
 
-        response = requests.get(locations_url, params=locations_params)
+        response = requests.get(locations_url, params=locations_params, timeout=30)
         if response.status_code == 200:
             data = response.json()
             if data["status"] == 200 and "data" in data:

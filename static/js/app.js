@@ -17,6 +17,9 @@ var liveRidesData = { car: [], bike: [], other: [] };
 // Track if live animation was already shown this session (for hybrid animation)
 var liveAnimationShown = false;
 
+// Guard against concurrent polls (if a poll takes longer than the interval)
+var pollInProgress = false;
+
 // History navigation state
 var historyModeActive = false;      // Are we viewing history?
 var historyViewIndex = -1;          // Current view point index (-1 = live/latest)
@@ -650,17 +653,15 @@ function updateLiveStartTime(startTimeStr, startTimestamp) {
 function showStaleSessionDialog(statusData) {
     var message = 'Live mode session is ' + statusData.age_days + ' days old.\n' +
                   'Started: ' + statusData.start_time_str + '\n\n' +
-                  'Do you want to:\n' +
-                  '- Resume from where you left off?\n' +
-                  '- Or reset and start fresh from now?\n\n' +
-                  'Click OK to Reset, Cancel to Resume';
+                  'OK = Resume from where you left off\n' +
+                  'Cancel = Reset and start fresh from now';
 
     if (confirm(message)) {
-        // Reset - start fresh
-        startLiveMode();
-    } else {
-        // Resume from saved state
+        // Resume from saved state (safe default)
         resumeLiveSession();
+    } else {
+        // Reset - start fresh (destructive, requires deliberate Cancel)
+        startLiveMode();
     }
 }
 
@@ -972,10 +973,14 @@ function stopLivePolling() {
         clearInterval(livePollingInterval);
         livePollingInterval = null;
     }
+    pollInProgress = false;
     updateLiveIndicator(false);
 }
 
 function pollLiveData() {
+    if (pollInProgress) return;  // Skip if previous poll still in-flight
+    pollInProgress = true;
+
     fetch('/api/live/poll', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -983,6 +988,8 @@ function pollLiveData() {
     })
     .then(function(response) { return response.json(); })
     .then(function(data) {
+        pollInProgress = false;
+
         if (!data.success) {
             console.error('Poll failed:', data.error);
             return;
@@ -1032,6 +1039,7 @@ function pollLiveData() {
         updateHistoryPanel();
     })
     .catch(function(err) {
+        pollInProgress = false;
         console.error('Poll error:', err.message);
     });
 }

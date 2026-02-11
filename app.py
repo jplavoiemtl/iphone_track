@@ -84,7 +84,11 @@ def detect_activities():
     if not discovery_data:
         return jsonify({"success": False, "error": f"No data found for {start_date}"}), 404
 
-    first_gps_point = next((item for item in discovery_data if item.get("_type") == "location"), None)
+    first_gps_point = next(
+        (item for item in discovery_data
+         if item.get("_type") == "location" and "lat" in item and "lon" in item),
+        None
+    )
     if not first_gps_point:
         return jsonify({"success": False, "error": "No GPS location points found to determine timezone"}), 404
 
