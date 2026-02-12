@@ -232,10 +232,12 @@ def run():
                     for t in ['car', 'bike', 'other']
                 )
 
+                last_gps_tst = gps_points[-1]['tst'] if gps_points else 0
+
                 if counts_changed or ends_changed:
                     check_and_notify_ride_transitions(
                         prev_counts, new_counts, prev_ends, new_ends,
-                        activities, detected_tz)
+                        activities, detected_tz, last_gps_tst)
 
                     prev_counts = dict(new_counts)
                     prev_ends = dict(new_ends)

@@ -69,18 +69,27 @@ def format_ride_end_text(ride, detected_tz):
             f"{start_local.strftime('%H:%M')}-{end_local.strftime('%H:%M')}")
 
 
+def _is_ride_open(ride, last_gps_timestamp):
+    """Check if a ride is still open (end matches the last GPS point).
+
+    Open rides have their end set to the last GPS point's timestamp by
+    parse_activities(). Closed rides have an explicit end marker timestamp
+    that is well before the latest GPS data.
+    """
+    return abs(ride['end'] - last_gps_timestamp) < 10
+
+
 def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
-                                      new_ends, activities, detected_tz):
+                                      new_ends, activities, detected_tz,
+                                      last_gps_timestamp):
     """Compare ride snapshots and send notifications for recent transitions.
 
     For each activity type, detects:
-    - Count increase + short duration (<2min): ride just started
-    - Count increase + long duration (>=2min): ride appeared already complete
-    - Same count + end timestamp moved >60s: open ride got its end marker
+    - Count increase + ride is open (end ≈ last GPS point): ride just started
+    - Count increase + ride is closed (end < last GPS point): ride appeared complete
+    - Same count + ride was open but is now closed: ride got its end marker
 
     Events older than 10 minutes (wall clock) are suppressed as historical.
-
-    Returns dict of updated counts and ends to persist.
     """
     now = int(time.time())
     activity_names = {'car': 'Car', 'bike': 'Bike', 'other': 'Walking'}
@@ -95,16 +104,15 @@ def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
         rides = activities.get(activity_type, [])
 
         if new_count > prev_count:
-            # New ride appeared — check the latest ride
+            # New ride appeared
             ride = rides[-1] if rides else None
             if not ride:
                 continue
 
-            ride_duration = ride['end'] - ride['start']
             ride_number = new_count
 
-            if ride_duration < 120:
-                # Short duration — ride just started
+            if _is_ride_open(ride, last_gps_timestamp):
+                # Ride is still in progress — send "Started"
                 event_timestamp = ride['start']
                 age = now - event_timestamp
 
@@ -119,7 +127,7 @@ def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
                     f"{name} Ride {ride_number} Started",
                     f"Started at {start_local.strftime('%H:%M')}")
             else:
-                # Long duration — ride appeared already complete
+                # Ride appeared already complete (has real end marker)
                 event_timestamp = ride['end']
                 age = now - event_timestamp
 
@@ -133,12 +141,19 @@ def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
                     format_ride_end_text(ride, detected_tz))
 
         elif new_count == prev_count and new_count > 0:
-            # Same count — check if end timestamp moved (ride completed)
-            if new_end - prev_end > 60:
-                ride = rides[-1] if rides else None
-                if not ride:
-                    continue
+            # Same count — check if a ride that was open is now closed
+            ride = rides[-1] if rides else None
+            if not ride:
+                continue
 
+            if _is_ride_open(ride, last_gps_timestamp):
+                # Ride is still open — end is just advancing with GPS points.
+                # Do NOT notify.
+                continue
+
+            # Ride is closed (has real end marker). Only notify if the end
+            # actually changed significantly from what we last saw.
+            if new_end - prev_end > 60:
                 ride_number = new_count
                 event_timestamp = ride['end']
                 age = now - event_timestamp
