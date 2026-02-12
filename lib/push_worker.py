@@ -25,7 +25,11 @@ from lib.geo import get_timezone_from_gps
 from lib.live import load_live_state
 from lib.owntracks import fetch_owntracks_data
 from lib.activities import parse_activities, calculate_activity_stats
-from lib.notifications import check_and_notify_ride_transitions
+from lib.notifications import (
+    check_and_notify_ride_transitions,
+    check_and_notify_other_ride_end,
+    is_other_ride_ended,
+)
 
 
 # Worker state file path
@@ -119,11 +123,13 @@ def run():
     worker_state = load_worker_state()
     prev_counts = {'car': 0, 'bike': 0, 'other': 0}
     prev_ends = {'car': 0, 'bike': 0, 'other': 0}
+    other_ended_notified = False
     first_run = True
 
     if worker_state:
         prev_counts = worker_state.get('prev_ride_counts', prev_counts)
         prev_ends = worker_state.get('prev_ride_ends', prev_ends)
+        other_ended_notified = worker_state.get('other_ended_notified', False)
         session_start_timestamp = worker_state.get('session_start_timestamp')
         tz_name = worker_state.get('detected_tz', config.DEFAULT_TIMEZONE)
         detected_tz = pytz.timezone(tz_name)
@@ -158,6 +164,7 @@ def run():
                 last_poll_timestamp = None
                 prev_counts = {'car': 0, 'bike': 0, 'other': 0}
                 prev_ends = {'car': 0, 'bike': 0, 'other': 0}
+                other_ended_notified = False
                 first_run = True
 
             now = int(time.time())
@@ -215,12 +222,14 @@ def run():
             if first_run:
                 prev_counts = dict(new_counts)
                 prev_ends = dict(new_ends)
+                other_ended_notified = False
                 first_run = False
                 save_worker_state({
                     'session_start_timestamp': session_start_timestamp,
                     'detected_tz': detected_tz.zone,
                     'prev_ride_counts': prev_counts,
-                    'prev_ride_ends': prev_ends
+                    'prev_ride_ends': prev_ends,
+                    'other_ended_notified': False
                 })
                 print(f"[PUSH-WORKER] Initialized baseline: counts={new_counts}, "
                       f"points={len(gps_points)}", flush=True)
@@ -234,6 +243,12 @@ def run():
 
                 last_gps_tst = gps_points[-1]['tst'] if gps_points else 0
 
+                # Reset other_ended_notified when a new walking ride appears
+                if new_counts.get('other', 0) != prev_counts.get('other', 0):
+                    other_ended_notified = False
+
+                state_changed = False
+
                 if counts_changed or ends_changed:
                     check_and_notify_ride_transitions(
                         prev_counts, new_counts, prev_ends, new_ends,
@@ -241,11 +256,30 @@ def run():
 
                     prev_counts = dict(new_counts)
                     prev_ends = dict(new_ends)
+                    state_changed = True
+
+                # Check for walking/other ride end via stationary gap
+                # (runs every poll, independent of count/end changes)
+                other_rides = activities.get('other', [])
+                if other_rides and last_gps_tst > 0:
+                    last_other = other_rides[-1]
+                    if not other_ended_notified:
+                        if check_and_notify_other_ride_end(
+                                last_other, len(other_rides), detected_tz):
+                            other_ended_notified = True
+                            state_changed = True
+                    elif not is_other_ride_ended(last_other):
+                        # User resumed walking — reset for next end detection
+                        other_ended_notified = False
+                        state_changed = True
+
+                if state_changed:
                     save_worker_state({
                         'session_start_timestamp': session_start_timestamp,
                         'detected_tz': detected_tz.zone,
                         'prev_ride_counts': prev_counts,
-                        'prev_ride_ends': prev_ends
+                        'prev_ride_ends': prev_ends,
+                        'other_ended_notified': other_ended_notified
                     })
 
             total_points = len(gps_points)
