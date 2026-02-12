@@ -21,6 +21,7 @@ doc/
 # Data files
 GPS_activity_markers.json
 live_mode_state.json
+push_notification_state.json
 
 # IDE
 .vscode/

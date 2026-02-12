@@ -18,6 +18,8 @@ lib/                # Backend library modules
   owntracks.py      # OwnTracks API client
   activities.py     # Activity parsing, ride splitting
   markers.py        # Activity markers file reader
+  notifications.py  # Pushcut push notification sender
+  push_worker.py    # Always-on push notification worker (separate container)
 templates/          # Jinja2 HTML templates
   index.html        # Main page
 static/             # Frontend assets
@@ -47,6 +49,7 @@ Required environment variables:
 - `OWNTRACKS_DEVICE_ID` - OwnTracks device UUID
 - `DEFAULT_TIMEZONE` - Fallback timezone (e.g., America/Montreal)
 - `FLASK_SECRET_KEY` - Random secret for Flask sessions
+- `PUSHCUT_WEBHOOK_URL` - (Optional) Pushcut webhook URL for push notifications
 
 ## Code Conventions
 - Python: standard library style, no type annotations unless they add clarity
@@ -64,6 +67,16 @@ stored in a cookie, and detection results are cached per-session in memory.
 - This allows desktop to detect Monday's activities while phone detects Tuesday's
 - Sessions are isolated — one device's actions don't affect another's view
 - The `FLASK_SECRET_KEY` environment variable is required for session cookies
+
+## Push Notifications
+- A separate push worker container (`lib/push_worker.py`) runs alongside the Flask app
+- It polls OwnTracks every 30 seconds independently of the browser
+- Detects ride transitions (start/end) for car, bike, and walking activities
+- Sends iPhone push notifications via Pushcut webhook API
+- Shares no in-memory state with Flask — communicates only through `live_mode_state.json`
+- Worker state persisted in `push_notification_state.json` (gitignored)
+- Historical events (>10 minutes old) are suppressed to avoid false notifications from batch uploads
+- Detailed plan: `doc/Phase_14_Push_Notifications_Plan.md`
 
 ## Docker Deployment (Raspberry Pi 4 / labpi)
 - The app runs in a Docker container on labpi using gunicorn with `--reload`
