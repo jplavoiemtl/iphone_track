@@ -20,6 +20,12 @@ HISTORICAL_THRESHOLD_SECONDS = 600  # 10 minutes
 # Stationary duration to consider a walking/other ride ended
 OTHER_STATIONARY_END_SECONDS = 300  # 5 minutes
 
+# Marker activity types
+MARKER_TYPES = {
+    'car_start': 'Car', 'car_end': 'Car',
+    'bike_start': 'Bike', 'bike_end': 'Bike',
+}
+
 
 def send_pushcut_notification(title, text):
     """Send a push notification via Pushcut webhook.
@@ -72,17 +78,86 @@ def format_ride_end_text(ride, detected_tz):
             f"{start_local.strftime('%H:%M')}-{end_local.strftime('%H:%M')}")
 
 
-def _is_ride_open(ride, last_gps_timestamp):
-    """Check if a car/bike ride is still open (end matches the last GPS point).
+def check_and_notify_markers(raw_data, seen_markers, activities, detected_tz):
+    """Scan raw data for new car/bike markers and send notifications.
 
-    Open rides have their end set to the last GPS point's timestamp by
-    parse_activities(). Closed rides have an explicit end marker timestamp
-    that is well before the latest GPS data.
+    Detects car_start, car_end, bike_start, bike_end markers directly from
+    raw OwnTracks data. Much faster than waiting for parse_activities() to
+    validate rides with 5+ GPS points.
 
-    Only valid for car/bike rides (marker-based). Walking/other rides use
-    _is_other_ride_active() and _is_other_ride_ended() instead.
+    Returns (updated_seen_markers, state_changed).
     """
-    return abs(ride['end'] - last_gps_timestamp) < 10
+    now = int(time.time())
+    new_seen = set(seen_markers)
+    state_changed = False
+
+    # Count start markers for ride numbering
+    start_counts = {'car': 0, 'bike': 0}
+
+    # Sort markers by timestamp for correct ride numbering
+    markers = []
+    for item in raw_data:
+        if item.get('_type') == 'lwt' and item.get('custom') is True:
+            activity = item.get('activity', '')
+            if activity in MARKER_TYPES:
+                markers.append(item)
+    markers.sort(key=lambda x: x['tst'])
+
+    for marker in markers:
+        activity = marker['activity']
+        tst = marker['tst']
+        ride_type = activity.split('_')[0]  # 'car' or 'bike'
+        name = MARKER_TYPES[activity]
+
+        # Track start counts for ride numbering
+        if activity.endswith('_start'):
+            start_counts[ride_type] += 1
+
+        # Skip already-seen markers
+        if tst in new_seen:
+            continue
+        new_seen.add(tst)
+        state_changed = True
+
+        # Historical event suppression
+        age = now - tst
+        if age > HISTORICAL_THRESHOLD_SECONDS:
+            print(f"[PUSH-WORKER] Suppressed: {name} marker at {tst} — "
+                  f"{age // 60}m ago — historical event", flush=True)
+            continue
+
+        if activity.endswith('_start'):
+            ride_number = start_counts[ride_type]
+            start_local = datetime.fromtimestamp(
+                tst, tz=pytz.UTC).astimezone(detected_tz)
+            send_pushcut_notification(
+                f"{name} Ride {ride_number} Started",
+                f"Started at {start_local.strftime('%H:%M')}")
+
+        elif activity.endswith('_end'):
+            ride_number = start_counts[ride_type]
+
+            # Look up ride stats from parse_activities() output
+            rides = activities.get(ride_type, [])
+            ride = None
+            for r in rides:
+                if abs(r['end'] - tst) < 5:
+                    ride = r
+                    break
+
+            if ride and ride.get('points'):
+                send_pushcut_notification(
+                    f"{name} Ride {ride_number} Ended",
+                    format_ride_end_text(ride, detected_tz))
+            else:
+                # Ride was filtered out (very short) — simpler notification
+                end_local = datetime.fromtimestamp(
+                    tst, tz=pytz.UTC).astimezone(detected_tz)
+                send_pushcut_notification(
+                    f"{name} Ride {ride_number} Ended",
+                    f"Ended at {end_local.strftime('%H:%M')}")
+
+    return new_seen, state_changed
 
 
 def _is_other_ride_active(ride, last_gps_timestamp):
@@ -114,152 +189,57 @@ def is_other_ride_ended(ride):
     return stationary >= OTHER_STATIONARY_END_SECONDS
 
 
-def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
-                                      new_ends, activities, detected_tz,
-                                      last_gps_timestamp):
-    """Compare ride snapshots and send notifications for recent transitions.
+def check_and_notify_other_transitions(prev_count, new_count, activities,
+                                       detected_tz, last_gps_timestamp):
+    """Handle walking/other ride count changes.
 
-    Car/bike (marker-based):
-    - Count increase + ride is open (end ≈ last GPS point): ride just started
-    - Count increase + ride is closed (end < last GPS point): ride appeared complete
-    - Same count + ride was open but is now closed: ride got its end marker
+    Walking rides have no markers, so transitions are detected from
+    parse_activities() count changes:
+    - Count increase + ride is active (points include latest GPS): Started
+    - Count increase + ride is not active (segment was split): Ended
 
-    Walking/other (count changes only — "Ended" handled separately by worker):
-    - Count increase + ride is active (points include latest GPS): ride started
-    - Count increase + ride is not active (segment was split): ride ended
-
-    Events older than 10 minutes (wall clock) are suppressed as historical.
-
-    Returns the updated prev_ends dict. For rides that were skipped (still
-    open), the old prev_end value is preserved so ends_changed will fire
-    again on the next poll.
+    "Ended" for active walking rides is handled separately by the worker
+    via stationary gap check (check_and_notify_other_ride_end).
     """
+    if new_count <= prev_count:
+        return
+
     now = int(time.time())
-    activity_names = {'car': 'Car', 'bike': 'Bike', 'other': 'Walking'}
-    updated_ends = dict(prev_ends)
+    rides = activities.get('other', [])
+    ride = rides[-1] if rides else None
+    if not ride:
+        return
 
-    for activity_type in ['car', 'bike', 'other']:
-        prev_count = prev_counts.get(activity_type, 0)
-        new_count = new_counts.get(activity_type, 0)
-        name = activity_names[activity_type]
+    ride_number = new_count
 
-        rides = activities.get(activity_type, [])
+    if _is_other_ride_active(ride, last_gps_timestamp):
+        # Currently walking — send "Started"
+        event_timestamp = ride['start']
+        age = now - event_timestamp
 
-        # Walking/other rides: no markers, different detection logic
-        if activity_type == 'other':
-            updated_ends['other'] = new_ends.get('other', 0)
-            if new_count > prev_count:
-                ride = rides[-1] if rides else None
-                if not ride:
-                    continue
+        if age > HISTORICAL_THRESHOLD_SECONDS:
+            print(f"[PUSH-WORKER] Suppressed: Walking Ride {ride_number} "
+                  f"started {age // 60}m ago — historical event", flush=True)
+            return
 
-                ride_number = new_count
+        start_local = datetime.fromtimestamp(
+            ride['start'], tz=pytz.UTC).astimezone(detected_tz)
+        send_pushcut_notification(
+            f"Walking Ride {ride_number} Started",
+            f"Started at {start_local.strftime('%H:%M')}")
+    else:
+        # Completed segment appeared (split from previous) — send "Ended"
+        event_timestamp = ride['end']
+        age = now - event_timestamp
 
-                if _is_other_ride_active(ride, last_gps_timestamp):
-                    # Currently walking — send "Started"
-                    event_timestamp = ride['start']
-                    age = now - event_timestamp
+        if age > HISTORICAL_THRESHOLD_SECONDS:
+            print(f"[PUSH-WORKER] Suppressed: Walking Ride {ride_number} "
+                  f"ended {age // 60}m ago — historical event", flush=True)
+            return
 
-                    if age > HISTORICAL_THRESHOLD_SECONDS:
-                        print(f"[PUSH-WORKER] Suppressed: {name} Ride {ride_number} "
-                              f"started {age // 60}m ago — historical event", flush=True)
-                        continue
-
-                    start_local = datetime.fromtimestamp(
-                        ride['start'], tz=pytz.UTC).astimezone(detected_tz)
-                    send_pushcut_notification(
-                        f"{name} Ride {ride_number} Started",
-                        f"Started at {start_local.strftime('%H:%M')}")
-                else:
-                    # Completed segment appeared (split from previous) — send "Ended"
-                    event_timestamp = ride['end']
-                    age = now - event_timestamp
-
-                    if age > HISTORICAL_THRESHOLD_SECONDS:
-                        print(f"[PUSH-WORKER] Suppressed: {name} Ride {ride_number} "
-                              f"ended {age // 60}m ago — historical event", flush=True)
-                        continue
-
-                    send_pushcut_notification(
-                        f"{name} Ride {ride_number} Ended",
-                        format_ride_end_text(ride, detected_tz))
-
-            # "Ended" for active walking rides is handled by the worker
-            # via stationary gap check (check_and_notify_other_ride_end)
-            continue
-
-        # Car/bike: marker-based detection
-        prev_end = prev_ends.get(activity_type, 0)
-        new_end = new_ends.get(activity_type, 0)
-
-        if new_count > prev_count:
-            # New ride appeared — always update prev_end
-            updated_ends[activity_type] = new_end
-            ride = rides[-1] if rides else None
-            if not ride:
-                continue
-
-            ride_number = new_count
-
-            if _is_ride_open(ride, last_gps_timestamp):
-                # Ride is still in progress — send "Started"
-                event_timestamp = ride['start']
-                age = now - event_timestamp
-
-                if age > HISTORICAL_THRESHOLD_SECONDS:
-                    print(f"[PUSH-WORKER] Suppressed: {name} Ride {ride_number} "
-                          f"started {age // 60}m ago — historical event", flush=True)
-                    continue
-
-                start_local = datetime.fromtimestamp(
-                    ride['start'], tz=pytz.UTC).astimezone(detected_tz)
-                send_pushcut_notification(
-                    f"{name} Ride {ride_number} Started",
-                    f"Started at {start_local.strftime('%H:%M')}")
-            else:
-                # Ride appeared already complete (has real end marker)
-                event_timestamp = ride['end']
-                age = now - event_timestamp
-
-                if age > HISTORICAL_THRESHOLD_SECONDS:
-                    print(f"[PUSH-WORKER] Suppressed: {name} Ride {ride_number} "
-                          f"ended {age // 60}m ago — historical event", flush=True)
-                    continue
-
-                send_pushcut_notification(
-                    f"{name} Ride {ride_number} Ended",
-                    format_ride_end_text(ride, detected_tz))
-
-        elif new_count == prev_count and new_count > 0:
-            # Same count — check if a ride that was open is now closed
-            ride = rides[-1] if rides else None
-            if not ride:
-                continue
-
-            if _is_ride_open(ride, last_gps_timestamp):
-                # Ride is still open — end is just advancing with GPS points.
-                # Do NOT notify, and do NOT update prev_end so that
-                # ends_changed will fire again on the next poll.
-                continue
-
-            # Ride is closed (has real end marker). Only notify if the end
-            # actually changed significantly from what we last saw.
-            updated_ends[activity_type] = new_end
-            if new_end - prev_end > 60:
-                ride_number = new_count
-                event_timestamp = ride['end']
-                age = now - event_timestamp
-
-                if age > HISTORICAL_THRESHOLD_SECONDS:
-                    print(f"[PUSH-WORKER] Suppressed: {name} Ride {ride_number} "
-                          f"ended {age // 60}m ago — historical event", flush=True)
-                    continue
-
-                send_pushcut_notification(
-                    f"{name} Ride {ride_number} Ended",
-                    format_ride_end_text(ride, detected_tz))
-
-    return updated_ends
+        send_pushcut_notification(
+            f"Walking Ride {ride_number} Ended",
+            format_ride_end_text(ride, detected_tz))
 
 
 def check_and_notify_other_ride_end(ride, ride_number, detected_tz):

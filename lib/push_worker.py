@@ -5,6 +5,11 @@ Runs as a separate process (Docker container) alongside the Flask app.
 Polls OwnTracks every 30 seconds, detects ride transitions, and sends
 iPhone push notifications via Pushcut.
 
+Car/bike: Detects start/end markers directly from raw OwnTracks data for
+  immediate notifications (no 5-point filter delay).
+Walking/other: Uses parse_activities() with count tracking and stationary
+  gap detection (no markers available).
+
 Shares no in-memory state with the Flask app. Communicates only through:
 - live_mode_state.json (reads — written by Flask on session start/reset)
 - push_notification_state.json (reads/writes — own state file)
@@ -24,9 +29,10 @@ import config
 from lib.geo import get_timezone_from_gps
 from lib.live import load_live_state
 from lib.owntracks import fetch_owntracks_data
-from lib.activities import parse_activities, calculate_activity_stats
+from lib.activities import parse_activities
 from lib.notifications import (
-    check_and_notify_ride_transitions,
+    check_and_notify_markers,
+    check_and_notify_other_transitions,
     check_and_notify_other_ride_end,
     is_other_ride_ended,
 )
@@ -46,7 +52,8 @@ WAIT_FOR_SESSION = 60  # seconds to wait when no live session exists
 def load_worker_state():
     """Load worker state from disk.
 
-    Returns dict with prev_ride_counts, prev_ride_ends, etc., or None.
+    Returns dict with seen_marker_timestamps, prev_other_count, etc.,
+    or None.
     """
     if not os.path.exists(WORKER_STATE_FILE):
         return None
@@ -65,25 +72,16 @@ def save_worker_state(state):
     os.replace(tmp_path, WORKER_STATE_FILE)
 
 
-def _extract_ride_counts(activities):
-    """Extract ride count per activity type."""
-    counts = {}
-    for activity_type in ['car', 'bike', 'other']:
-        rides = activities.get(activity_type, [])
-        counts[activity_type] = len(rides)
-    return counts
-
-
-def _extract_ride_ends(activities):
-    """Extract the last ride's end timestamp per activity type."""
-    ends = {}
-    for activity_type in ['car', 'bike', 'other']:
-        rides = activities.get(activity_type, [])
-        if rides:
-            ends[activity_type] = rides[-1]['end']
-        else:
-            ends[activity_type] = 0
-    return ends
+def _build_state_dict(session_start_timestamp, detected_tz, seen_markers,
+                      prev_other_count, other_ended_notified):
+    """Build the state dict for saving."""
+    return {
+        'session_start_timestamp': session_start_timestamp,
+        'detected_tz': detected_tz.zone,
+        'seen_marker_timestamps': list(seen_markers),
+        'prev_other_count': prev_other_count,
+        'other_ended_notified': other_ended_notified,
+    }
 
 
 def _fetch_data(from_timestamp, to_timestamp, detected_tz):
@@ -119,22 +117,23 @@ def run():
     detected_tz = pytz.timezone(config.DEFAULT_TIMEZONE)
     session_start_timestamp = None
 
-    # Load persisted state (ride counts/ends survive restarts)
+    # Load persisted state
     worker_state = load_worker_state()
-    prev_counts = {'car': 0, 'bike': 0, 'other': 0}
-    prev_ends = {'car': 0, 'bike': 0, 'other': 0}
+    seen_markers = set()
+    prev_other_count = 0
     other_ended_notified = False
     first_run = True
 
     if worker_state:
-        prev_counts = worker_state.get('prev_ride_counts', prev_counts)
-        prev_ends = worker_state.get('prev_ride_ends', prev_ends)
+        seen_markers = set(worker_state.get('seen_marker_timestamps', []))
+        prev_other_count = worker_state.get('prev_other_count', 0)
         other_ended_notified = worker_state.get('other_ended_notified', False)
         session_start_timestamp = worker_state.get('session_start_timestamp')
         tz_name = worker_state.get('detected_tz', config.DEFAULT_TIMEZONE)
         detected_tz = pytz.timezone(tz_name)
         first_run = False
-        print(f"[PUSH-WORKER] Loaded state: counts={prev_counts}", flush=True)
+        print(f"[PUSH-WORKER] Loaded state: {len(seen_markers)} seen markers, "
+              f"other_count={prev_other_count}", flush=True)
 
     while True:
         try:
@@ -162,8 +161,8 @@ def run():
                 raw_data = []
                 existing_timestamps = set()
                 last_poll_timestamp = None
-                prev_counts = {'car': 0, 'bike': 0, 'other': 0}
-                prev_ends = {'car': 0, 'bike': 0, 'other': 0}
+                seen_markers = set()
+                prev_other_count = 0
                 other_ended_notified = False
                 first_run = True
 
@@ -207,11 +206,6 @@ def run():
             # Re-parse all activities from full accumulated data
             raw_data.sort(key=lambda x: x.get('tst', 0))
             gps_points, activities = parse_activities(raw_data)
-            activity_stats = calculate_activity_stats(activities) if activities else {}
-
-            # Extract current ride state
-            new_counts = _extract_ride_counts(activities)
-            new_ends = _extract_ride_ends(activities)
 
             # Advance last_poll_timestamp only if new points arrived
             if new_points:
@@ -220,46 +214,46 @@ def run():
 
             # On first run, initialize baseline without sending notifications
             if first_run:
-                prev_counts = dict(new_counts)
-                prev_ends = dict(new_ends)
+                # Collect all existing markers into seen set
+                for item in raw_data:
+                    if (item.get('_type') == 'lwt' and item.get('custom') is True
+                            and item.get('activity', '') in
+                            ('car_start', 'car_end', 'bike_start', 'bike_end')):
+                        seen_markers.add(item['tst'])
+
+                new_other_count = len(activities.get('other', []))
+                prev_other_count = new_other_count
                 other_ended_notified = False
                 first_run = False
-                save_worker_state({
-                    'session_start_timestamp': session_start_timestamp,
-                    'detected_tz': detected_tz.zone,
-                    'prev_ride_counts': prev_counts,
-                    'prev_ride_ends': prev_ends,
-                    'other_ended_notified': False
-                })
-                print(f"[PUSH-WORKER] Initialized baseline: counts={new_counts}, "
+                save_worker_state(_build_state_dict(
+                    session_start_timestamp, detected_tz, seen_markers,
+                    prev_other_count, other_ended_notified))
+                print(f"[PUSH-WORKER] Initialized baseline: "
+                      f"{len(seen_markers)} markers, "
+                      f"other_count={prev_other_count}, "
                       f"points={len(gps_points)}", flush=True)
             else:
-                # Check for transitions and notify
-                counts_changed = new_counts != prev_counts
-                ends_changed = any(
-                    new_ends.get(t, 0) - prev_ends.get(t, 0) > 60
-                    for t in ['car', 'bike', 'other']
-                )
-
-                last_gps_tst = gps_points[-1]['tst'] if gps_points else 0
-
-                # Reset other_ended_notified when a new walking ride appears
-                if new_counts.get('other', 0) != prev_counts.get('other', 0):
-                    other_ended_notified = False
-
                 state_changed = False
 
-                if counts_changed or ends_changed:
-                    updated_ends = check_and_notify_ride_transitions(
-                        prev_counts, new_counts, prev_ends, new_ends,
-                        activities, detected_tz, last_gps_tst)
-
-                    prev_counts = dict(new_counts)
-                    prev_ends = updated_ends
+                # Car/bike: scan for new markers (immediate notification)
+                seen_markers, markers_changed = check_and_notify_markers(
+                    raw_data, seen_markers, activities, detected_tz)
+                if markers_changed:
                     state_changed = True
 
-                # Check for walking/other ride end via stationary gap
-                # (runs every poll, independent of count/end changes)
+                # Walking/other: count-based detection
+                last_gps_tst = gps_points[-1]['tst'] if gps_points else 0
+                new_other_count = len(activities.get('other', []))
+
+                if new_other_count != prev_other_count:
+                    check_and_notify_other_transitions(
+                        prev_other_count, new_other_count, activities,
+                        detected_tz, last_gps_tst)
+                    prev_other_count = new_other_count
+                    other_ended_notified = False
+                    state_changed = True
+
+                # Walking/other: stationary gap end detection
                 other_rides = activities.get('other', [])
                 if other_rides and last_gps_tst > 0:
                     last_other = other_rides[-1]
@@ -274,17 +268,15 @@ def run():
                         state_changed = True
 
                 if state_changed:
-                    save_worker_state({
-                        'session_start_timestamp': session_start_timestamp,
-                        'detected_tz': detected_tz.zone,
-                        'prev_ride_counts': prev_counts,
-                        'prev_ride_ends': prev_ends,
-                        'other_ended_notified': other_ended_notified
-                    })
+                    save_worker_state(_build_state_dict(
+                        session_start_timestamp, detected_tz, seen_markers,
+                        prev_other_count, other_ended_notified))
 
             total_points = len(gps_points)
+            other_count = len(activities.get('other', []))
             print(f"[PUSH-WORKER] Poll: {len(new_points)} new points, "
-                  f"{total_points} total, counts={new_counts}", flush=True)
+                  f"{total_points} total, markers_seen={len(seen_markers)}, "
+                  f"other_count={other_count}", flush=True)
 
         except Exception as e:
             print(f"[PUSH-WORKER] Error in poll cycle: {e}", flush=True)
