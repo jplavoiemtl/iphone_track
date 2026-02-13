@@ -5,7 +5,7 @@ Runs as a separate process (Docker container) alongside the Flask app.
 Polls OwnTracks every 30 seconds, detects ride transitions, and sends
 iPhone push notifications via Pushcut.
 
-Car/bike: Detects start/end markers directly from raw OwnTracks data for
+Car/bike: Detects start/end markers (injected by Node-RED) directly for
   immediate notifications (no 5-point filter delay).
 Walking/other: Uses parse_activities() with count tracking and stationary
   gap detection (no markers available).

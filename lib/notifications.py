@@ -82,7 +82,7 @@ def check_and_notify_markers(raw_data, seen_markers, activities, detected_tz):
     """Scan raw data for new car/bike markers and send notifications.
 
     Detects car_start, car_end, bike_start, bike_end markers directly from
-    raw OwnTracks data. Much faster than waiting for parse_activities() to
+    raw data (markers injected by Node-RED). Much faster than waiting for parse_activities() to
     validate rides with 5+ GPS points.
 
     Returns (updated_seen_markers, state_changed).
