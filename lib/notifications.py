@@ -129,9 +129,14 @@ def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
     - Count increase + ride is not active (segment was split): ride ended
 
     Events older than 10 minutes (wall clock) are suppressed as historical.
+
+    Returns the updated prev_ends dict. For rides that were skipped (still
+    open), the old prev_end value is preserved so ends_changed will fire
+    again on the next poll.
     """
     now = int(time.time())
     activity_names = {'car': 'Car', 'bike': 'Bike', 'other': 'Walking'}
+    updated_ends = dict(prev_ends)
 
     for activity_type in ['car', 'bike', 'other']:
         prev_count = prev_counts.get(activity_type, 0)
@@ -142,6 +147,7 @@ def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
 
         # Walking/other rides: no markers, different detection logic
         if activity_type == 'other':
+            updated_ends['other'] = new_ends.get('other', 0)
             if new_count > prev_count:
                 ride = rides[-1] if rides else None
                 if not ride:
@@ -187,7 +193,8 @@ def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
         new_end = new_ends.get(activity_type, 0)
 
         if new_count > prev_count:
-            # New ride appeared
+            # New ride appeared — always update prev_end
+            updated_ends[activity_type] = new_end
             ride = rides[-1] if rides else None
             if not ride:
                 continue
@@ -231,11 +238,13 @@ def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
 
             if _is_ride_open(ride, last_gps_timestamp):
                 # Ride is still open — end is just advancing with GPS points.
-                # Do NOT notify.
+                # Do NOT notify, and do NOT update prev_end so that
+                # ends_changed will fire again on the next poll.
                 continue
 
             # Ride is closed (has real end marker). Only notify if the end
             # actually changed significantly from what we last saw.
+            updated_ends[activity_type] = new_end
             if new_end - prev_end > 60:
                 ride_number = new_count
                 event_timestamp = ride['end']
@@ -249,6 +258,8 @@ def check_and_notify_ride_transitions(prev_counts, new_counts, prev_ends,
                 send_pushcut_notification(
                     f"{name} Ride {ride_number} Ended",
                     format_ride_end_text(ride, detected_tz))
+
+    return updated_ends
 
 
 def check_and_notify_other_ride_end(ride, ride_number, detected_tz):

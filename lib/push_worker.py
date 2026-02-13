@@ -250,12 +250,12 @@ def run():
                 state_changed = False
 
                 if counts_changed or ends_changed:
-                    check_and_notify_ride_transitions(
+                    updated_ends = check_and_notify_ride_transitions(
                         prev_counts, new_counts, prev_ends, new_ends,
                         activities, detected_tz, last_gps_tst)
 
                     prev_counts = dict(new_counts)
-                    prev_ends = dict(new_ends)
+                    prev_ends = updated_ends
                     state_changed = True
 
                 # Check for walking/other ride end via stationary gap
