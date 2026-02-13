@@ -140,7 +140,7 @@ def check_and_notify_markers(raw_data, seen_markers, activities, detected_tz):
                     ride_number = idx + 1
                     break
             else:
-                ride_number = len(rides)
+                ride_number = len(rides) + 1
 
             if ride and ride.get('points'):
                 send_pushcut_notification(
