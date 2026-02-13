@@ -18,7 +18,7 @@ from lib.geo import calculate_track_distance, detect_stationary_gap
 HISTORICAL_THRESHOLD_SECONDS = 600  # 10 minutes
 
 # Stationary duration to consider a walking/other ride ended
-OTHER_STATIONARY_END_SECONDS = 300  # 5 minutes
+OTHER_STATIONARY_END_SECONDS = 1200  # 20 minutes
 
 # Marker activity types
 MARKER_TYPES = {
