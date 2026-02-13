@@ -91,10 +91,7 @@ def check_and_notify_markers(raw_data, seen_markers, activities, detected_tz):
     new_seen = set(seen_markers)
     state_changed = False
 
-    # Count start markers for ride numbering
-    start_counts = {'car': 0, 'bike': 0}
-
-    # Sort markers by timestamp for correct ride numbering
+    # Collect car/bike markers from raw data, sorted by timestamp
     markers = []
     for item in raw_data:
         if item.get('_type') == 'lwt' and item.get('custom') is True:
@@ -109,10 +106,6 @@ def check_and_notify_markers(raw_data, seen_markers, activities, detected_tz):
         ride_type = activity.split('_')[0]  # 'car' or 'bike'
         name = MARKER_TYPES[activity]
 
-        # Track start counts for ride numbering
-        if activity.endswith('_start'):
-            start_counts[ride_type] += 1
-
         # Skip already-seen markers
         if tst in new_seen:
             continue
@@ -126,8 +119,12 @@ def check_and_notify_markers(raw_data, seen_markers, activities, detected_tz):
                   f"{age // 60}m ago — historical event", flush=True)
             continue
 
+        # Ride numbering from validated activities (matches map app)
+        rides = activities.get(ride_type, [])
+
         if activity.endswith('_start'):
-            ride_number = start_counts[ride_type]
+            # Ride may not be validated yet (< 5 GPS points), so next number
+            ride_number = len(rides) + 1
             start_local = datetime.fromtimestamp(
                 tst, tz=pytz.UTC).astimezone(detected_tz)
             send_pushcut_notification(
@@ -135,22 +132,21 @@ def check_and_notify_markers(raw_data, seen_markers, activities, detected_tz):
                 f"Started at {start_local.strftime('%H:%M')}")
 
         elif activity.endswith('_end'):
-            ride_number = start_counts[ride_type]
-
-            # Look up ride stats from parse_activities() output
-            rides = activities.get(ride_type, [])
+            # Find matching ride by end timestamp for stats and numbering
             ride = None
-            for r in rides:
+            for idx, r in enumerate(rides):
                 if abs(r['end'] - tst) < 5:
                     ride = r
+                    ride_number = idx + 1
                     break
+            else:
+                ride_number = len(rides)
 
             if ride and ride.get('points'):
                 send_pushcut_notification(
                     f"{name} Ride {ride_number} Ended",
                     format_ride_end_text(ride, detected_tz))
             else:
-                # Ride was filtered out (very short) — simpler notification
                 end_local = datetime.fromtimestamp(
                     tst, tz=pytz.UTC).astimezone(detected_tz)
                 send_pushcut_notification(
