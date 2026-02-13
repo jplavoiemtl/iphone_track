@@ -10,6 +10,7 @@ var lastDrawnTimestamp = 0;  // Track last point drawn to avoid missing any
 
 // Live mode ride tracking - to detect when to redraw rich layers
 var liveRideCounts = { car: 0, bike: 0, other: 0 };
+var liveRidePoints = { car: 0, bike: 0, other: 0 };
 
 // Store live rides data for current activity display
 var liveRidesData = { car: [], bike: [], other: [] };
@@ -694,6 +695,7 @@ function joinLiveSession() {
     // Reset state for fresh draw
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0, other: 0 };
+    liveRidePoints = { car: 0, bike: 0, other: 0 };
     liveRidesData = { car: [], bike: [], other: [] };
 
     // Call start which will return the existing session
@@ -747,6 +749,7 @@ function resumeLiveSession() {
     // Reset state - we'll draw all points from the loaded data
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0, other: 0 };
+    liveRidePoints = { car: 0, bike: 0, other: 0 };
     liveRidesData = { car: [], bike: [], other: [] };
 
     fetch('/api/live/start', {
@@ -915,6 +918,7 @@ function startLiveMode() {
     // Reset state for fresh start
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0, other: 0 };
+    liveRidePoints = { car: 0, bike: 0, other: 0 };
     liveRidesData = { car: [], bike: [], other: [] };
     liveAnimationShown = false;  // Reset so next entry will animate
 
@@ -1003,19 +1007,28 @@ function pollLiveData() {
         var now = new Date();
         document.getElementById('live-last-update').textContent = now.toLocaleTimeString();
 
-        // Check if ride counts changed - need to redraw rich layers
+        // Check if ride counts or points changed - need to redraw rich layers
         var newCarCount = (data.stats && data.stats.car) ? data.stats.car.count : 0;
         var newBikeCount = (data.stats && data.stats.bike) ? data.stats.bike.count : 0;
         var newOtherCount = (data.stats && data.stats.other) ? data.stats.other.count : 0;
+        var newCarPoints = (data.stats && data.stats.car) ? data.stats.car.total_points : 0;
+        var newBikePoints = (data.stats && data.stats.bike) ? data.stats.bike.total_points : 0;
+        var newOtherPoints = (data.stats && data.stats.other) ? data.stats.other.total_points : 0;
         var ridesChanged = (newCarCount !== liveRideCounts.car) ||
                            (newBikeCount !== liveRideCounts.bike) ||
-                           (newOtherCount !== liveRideCounts.other);
+                           (newOtherCount !== liveRideCounts.other) ||
+                           (newCarPoints !== liveRidePoints.car) ||
+                           (newBikePoints !== liveRidePoints.bike) ||
+                           (newOtherPoints !== liveRidePoints.other);
 
         if (ridesChanged) {
-            // Update counts
+            // Update counts and points
             liveRideCounts.car = newCarCount;
             liveRideCounts.bike = newBikeCount;
             liveRideCounts.other = newOtherCount;
+            liveRidePoints.car = newCarPoints;
+            liveRidePoints.bike = newBikePoints;
+            liveRidePoints.other = newOtherPoints;
             // Fetch and redraw rich layers for activities
             refreshLiveActivityLayers();
         }
@@ -1178,6 +1191,7 @@ function resetLiveMode() {
     // Reset state for fresh start
     lastDrawnTimestamp = 0;
     liveRideCounts = { car: 0, bike: 0, other: 0 };
+    liveRidePoints = { car: 0, bike: 0, other: 0 };
     liveRidesData = { car: [], bike: [], other: [] };
     liveAnimationShown = false;  // Reset so next data will animate
     resetHistoryState();  // Clear history navigation state
