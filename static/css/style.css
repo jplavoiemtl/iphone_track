@@ -698,7 +698,8 @@ body {
     }
 
     #sidebar-toggle {
-        left: 10px;
+        left: 205px;
+        top: 8px;
     }
 
     body.sidebar-open #sidebar-toggle {
@@ -767,13 +768,19 @@ body {
 
 @media (min-width: 769px) {
 
-    /* On desktop, when sidebar is hidden shift the toggle to the edge */
+    /* On desktop, when sidebar is hidden shift the toggle past map buttons */
     body.sidebar-collapsed #sidebar-toggle {
-        left: 10px;
+        left: 185px;
+        top: 8px;
     }
 
     body:not(.sidebar-collapsed) #sidebar-toggle {
         left: 390px;
+        top: 50px;
+    }
+
+    #layerPanelOuter {
+        margin-top: 38px !important;
     }
 
     #sidebar-backdrop {

@@ -822,31 +822,46 @@ function toggleLayer(activityType) {
     updateLayerControl();
 }
 
+var layerPanelCollapsed = false;
+
 function createLayerControl() {
     var controlDiv = document.createElement('div');
     controlDiv.id = 'mapLayerControl';
     controlDiv.innerHTML =
-        '<div style="background:rgba(255,255,255,0.95);border:2px solid #666;border-radius:8px;margin:10px;padding:12px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);min-width:220px;">' +
-        '<div style="font-weight:bold;margin-bottom:10px;color:#333;font-size:14px;text-align:center;border-bottom:1px solid #ddd;padding-bottom:8px;">Active Layers</div>' +
-        '<div id="mapLayerList"></div>' +
-        '<div id="history-panel" style="display:none;border-top:1px solid #ddd;margin-top:10px;padding-top:10px;">' +
-            '<div id="history-label" class="history-label live" style="font-weight:bold;color:#333;margin-bottom:6px;"></div>' +
-            '<div id="history-time" style="color:#666;margin-bottom:4px;"></div>' +
-            '<div style="color:#555;font-size:11px;margin-bottom:8px;">' +
-                '<span id="history-distance">0 km</span> | ' +
-                '<span id="history-duration">0m</span> | ' +
-                '<span id="history-speed">0 km/h</span>' +
-            '</div>' +
-            '<div style="display:flex;justify-content:center;gap:4px;">' +
-                '<button id="history-back10" onclick="navigateHistory(-10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 10 points">««</button>' +
-                '<button id="history-back" onclick="navigateHistory(-1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 1 point">«</button>' +
-                '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:4px 10px;border:none;border-radius:4px;background:#4285F4;color:white;cursor:pointer;font-size:11px;font-weight:bold;">LIVE</button>' +
-                '<button id="history-forward" onclick="navigateHistory(1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 1 point">»</button>' +
-                '<button id="history-forward10" onclick="navigateHistory(10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 10 points">»»</button>' +
+        '<div id="layerPanelOuter" style="background:rgba(255,255,255,0.95);border:2px solid #666;border-radius:8px;margin:8px 4px;padding:8px 10px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);max-width:calc(100vw - 70px);">' +
+        '<div id="layerPanelHeader" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:2px 0;" onclick="toggleLayerPanel()">' +
+            '<span style="font-weight:bold;color:#333;font-size:13px;">Active Layers</span>' +
+            '<span id="layerPanelArrow" style="font-size:10px;color:#666;margin-left:8px;">&#9660;</span>' +
+        '</div>' +
+        '<div id="layerPanelBody">' +
+            '<div id="mapLayerList" style="margin-top:6px;"></div>' +
+            '<div id="history-panel" style="display:none;border-top:1px solid #ddd;margin-top:6px;padding-top:6px;">' +
+                '<div id="history-label" class="history-label live" style="font-weight:bold;color:#333;margin-bottom:4px;"></div>' +
+                '<div id="history-time" style="color:#666;margin-bottom:3px;"></div>' +
+                '<div style="color:#555;font-size:11px;margin-bottom:6px;">' +
+                    '<span id="history-distance">0 km</span> | ' +
+                    '<span id="history-duration">0m</span> | ' +
+                    '<span id="history-speed">0 km/h</span>' +
+                '</div>' +
+                '<div style="display:flex;justify-content:center;gap:4px;">' +
+                    '<button id="history-back10" onclick="navigateHistory(-10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 10 points">&#171;&#171;</button>' +
+                    '<button id="history-back" onclick="navigateHistory(-1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 1 point">&#171;</button>' +
+                    '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:4px 10px;border:none;border-radius:4px;background:#4285F4;color:white;cursor:pointer;font-size:11px;font-weight:bold;">LIVE</button>' +
+                    '<button id="history-forward" onclick="navigateHistory(1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 1 point">&#187;</button>' +
+                    '<button id="history-forward10" onclick="navigateHistory(10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 10 points">&#187;&#187;</button>' +
+                '</div>' +
             '</div>' +
         '</div>' +
         '</div>';
-    map.controls[google.maps.ControlPosition.TOP_LEFT].push(controlDiv);
+    map.controls[google.maps.ControlPosition.LEFT_TOP].push(controlDiv);
+}
+
+function toggleLayerPanel() {
+    layerPanelCollapsed = !layerPanelCollapsed;
+    var body = document.getElementById('layerPanelBody');
+    var arrow = document.getElementById('layerPanelArrow');
+    if (body) body.style.display = layerPanelCollapsed ? 'none' : 'block';
+    if (arrow) arrow.innerHTML = layerPanelCollapsed ? '&#9654;' : '&#9660;';
 }
 
 function updateLayerControl() {
@@ -862,36 +877,32 @@ function updateLayerControl() {
             var isVisible = layerVisibility[activityType];
             var stats = layerStats[activityType];
 
-            // Container for layer item + stats
-            var container = document.createElement('div');
-            container.style.cssText = 'margin:8px 0;';
+            // Single compact row per layer
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;padding:4px 6px;background:rgba(248,248,248,0.8);border-radius:6px;border:1px solid #e0e0e0;margin:4px 0;gap:6px;';
 
-            // Layer header row
-            var item = document.createElement('div');
-            item.style.cssText = 'display:flex;align-items:center;padding:6px;background:rgba(248,248,248,0.8);border-radius:6px 6px ' + (stats ? '0 0' : '6px 6px') + ';border:1px solid #e0e0e0;' + (stats ? 'border-bottom:none;' : '');
             var buttonId = activityType === 'live' ? 'id="live-layer-toggle"' : '';
-            item.innerHTML =
-                '<span style="font-size:16px;margin-right:8px;width:20px;text-align:center;">' + config.icon + '</span>' +
-                '<span style="flex-grow:1;font-weight:500;color:#333;">' + config.name + '</span>' +
-                '<button ' + buttonId + ' onclick="toggleLayer(\'' + activityType + '\')" style="padding:4px 8px;border:none;border-radius:4px;color:white;font-size:10px;font-weight:bold;cursor:pointer;background-color:' + config.color + ';opacity:' + (isVisible ? '1' : '0.5') + ';">' +
-                (isVisible ? 'Hide' : 'Show') + '</button>';
-            container.appendChild(item);
 
-            // Stats row (if available)
+            // Build stats string if available
+            var statsHtml = '';
             if (stats) {
                 var durationMins = Math.floor(stats.duration / 60);
                 var durationStr = durationMins >= 60 ?
-                    Math.floor(durationMins / 60) + 'h ' + (durationMins % 60) + 'm' :
+                    Math.floor(durationMins / 60) + 'h' + (durationMins % 60) + 'm' :
                     durationMins + 'm';
                 var avgSpeed = stats.duration > 0 ? (stats.distance / stats.duration * 3600) : 0;
-
-                var statsRow = document.createElement('div');
-                statsRow.style.cssText = 'padding:4px 6px 6px 34px;background:rgba(248,248,248,0.6);border-radius:0 0 6px 6px;border:1px solid #e0e0e0;border-top:none;font-size:11px;color:#666;';
-                statsRow.innerHTML = stats.distance.toFixed(1) + ' km | ' + durationStr + ' | ' + avgSpeed.toFixed(1) + ' km/h';
-                container.appendChild(statsRow);
+                statsHtml = '<span style="color:#666;font-size:10px;white-space:nowrap;">' +
+                    stats.distance.toFixed(1) + 'km ' + durationStr + ' ' + avgSpeed.toFixed(0) + 'km/h</span>';
             }
 
-            layerList.appendChild(container);
+            row.innerHTML =
+                '<span style="font-size:14px;width:18px;text-align:center;flex-shrink:0;">' + config.icon + '</span>' +
+                '<span style="font-weight:500;color:#333;font-size:12px;white-space:nowrap;">' + config.name + '</span>' +
+                (statsHtml ? statsHtml : '') +
+                '<button ' + buttonId + ' onclick="toggleLayer(\'' + activityType + '\')" style="margin-left:auto;padding:2px 6px;border:none;border-radius:3px;color:white;font-size:9px;font-weight:bold;cursor:pointer;flex-shrink:0;background-color:' + config.color + ';opacity:' + (isVisible ? '1' : '0.5') + ';">' +
+                (isVisible ? 'Hide' : 'Show') + '</button>';
+
+            layerList.appendChild(row);
         }
     });
 }
