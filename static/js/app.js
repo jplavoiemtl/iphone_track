@@ -1068,8 +1068,10 @@ function refreshLiveActivityLayers() {
         .then(function(data) {
             if (data.success && data.rides && data.rides.length > 0) {
                 liveRidesData.car = data.rides;
+                var wasVisible = layerVisibility['car'] !== false;
                 clearActivityLayer('car');
                 addRichLayer('car', data.rides, data.stats);
+                if (!wasVisible) toggleLayer('car');
                 updateCurrentActivityDisplay();
             }
         })
@@ -1087,8 +1089,10 @@ function refreshLiveActivityLayers() {
         .then(function(data) {
             if (data.success && data.rides && data.rides.length > 0) {
                 liveRidesData.bike = data.rides;
+                var wasVisible = layerVisibility['bike'] !== false;
                 clearActivityLayer('bike');
                 addRichLayer('bike', data.rides, data.stats);
+                if (!wasVisible) toggleLayer('bike');
                 updateCurrentActivityDisplay();
             }
         })
@@ -1106,8 +1110,10 @@ function refreshLiveActivityLayers() {
         .then(function(data) {
             if (data.success && data.rides && data.rides.length > 0) {
                 liveRidesData.other = data.rides;
+                var wasVisible = layerVisibility['other'] !== false;
                 clearActivityLayer('other');
                 addRichLayer('other', data.rides, data.stats);
+                if (!wasVisible) toggleLayer('other');
                 updateCurrentActivityDisplay();
             }
         })
