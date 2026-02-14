@@ -69,7 +69,7 @@ function clearActivityLayer(activityType) {
     updateLayerControl();
 }
 
-function addRichLayer(activityType, ridesData, statsData) {
+function addRichLayer(activityType, ridesData, statsData, skipFitBounds) {
     if (!activityLayers[activityType]) {
         activityLayers[activityType] = { paths: [], markers: [], visible: true };
         layerVisibility[activityType] = true;
@@ -107,7 +107,9 @@ function addRichLayer(activityType, ridesData, statsData) {
         addRideMarkers(activityType, ride, layer);
     });
 
-    fitBoundsToRides(ridesData);
+    if (!skipFitBounds) {
+        fitBoundsToRides(ridesData);
+    }
     updateLayerControl();
 }
 

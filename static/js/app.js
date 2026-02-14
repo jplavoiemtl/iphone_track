@@ -1070,7 +1070,7 @@ function refreshLiveActivityLayers() {
                 liveRidesData.car = data.rides;
                 var wasVisible = layerVisibility['car'] !== false;
                 clearActivityLayer('car');
-                addRichLayer('car', data.rides, data.stats);
+                addRichLayer('car', data.rides, data.stats, true);
                 if (!wasVisible) toggleLayer('car');
                 updateCurrentActivityDisplay();
             }
@@ -1091,7 +1091,7 @@ function refreshLiveActivityLayers() {
                 liveRidesData.bike = data.rides;
                 var wasVisible = layerVisibility['bike'] !== false;
                 clearActivityLayer('bike');
-                addRichLayer('bike', data.rides, data.stats);
+                addRichLayer('bike', data.rides, data.stats, true);
                 if (!wasVisible) toggleLayer('bike');
                 updateCurrentActivityDisplay();
             }
@@ -1112,7 +1112,7 @@ function refreshLiveActivityLayers() {
                 liveRidesData.other = data.rides;
                 var wasVisible = layerVisibility['other'] !== false;
                 clearActivityLayer('other');
-                addRichLayer('other', data.rides, data.stats);
+                addRichLayer('other', data.rides, data.stats, true);
                 if (!wasVisible) toggleLayer('other');
                 updateCurrentActivityDisplay();
             }
