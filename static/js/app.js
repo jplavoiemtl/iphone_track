@@ -21,6 +21,10 @@ var liveAnimationShown = false;
 // Guard against concurrent polls (if a poll takes longer than the interval)
 var pollInProgress = false;
 
+// Screen keep-awake via NoSleep.js (works over HTTP on iOS)
+var noSleep = new NoSleep();
+var noSleepActive = false;
+
 // History navigation state
 var historyModeActive = false;      // Are we viewing history?
 var historyViewIndex = -1;          // Current view point index (-1 = live/latest)
@@ -86,6 +90,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (liveResetBtn) {
         liveResetBtn.addEventListener('click', function() {
             resetLiveMode();
+        });
+    }
+
+    var liveAwakeBtn = document.getElementById('live-awake-btn');
+    if (liveAwakeBtn) {
+        liveAwakeBtn.addEventListener('click', function() {
+            toggleKeepAwake();
         });
     }
 
@@ -632,6 +643,8 @@ function showStartLiveButton() {
     document.getElementById('live-start-btn').textContent = 'Start Live Mode';
     document.getElementById('live-reset-btn').style.display = 'none';
     document.getElementById('live-save-btn').style.display = 'none';
+    var awakeBtn = document.getElementById('live-awake-btn');
+    if (awakeBtn) awakeBtn.style.display = 'none';
     document.getElementById('live-save-status').style.display = 'none';
     document.getElementById('live-start-time').textContent = '--';
     document.getElementById('live-duration').textContent = '';
@@ -688,6 +701,8 @@ function joinLiveSession() {
     startBtn.style.display = 'none';
     document.getElementById('live-reset-btn').style.display = 'block';
     document.getElementById('live-save-btn').style.display = 'block';
+    var awakeBtn = document.getElementById('live-awake-btn');
+    if (awakeBtn) awakeBtn.style.display = 'block';
 
     // Decide whether to animate: only if animation hasn't been shown yet this session
     var shouldAnimate = !liveAnimationShown;
@@ -775,6 +790,8 @@ function resumeLiveSession() {
         startBtn.style.display = 'none';
         document.getElementById('live-reset-btn').style.display = 'block';
         document.getElementById('live-save-btn').style.display = 'block';
+        var awakeBtn = document.getElementById('live-awake-btn');
+    if (awakeBtn) awakeBtn.style.display = 'block';
 
         // Load existing track on map (with animation for first view after resume)
         if (data.total_points > 0) {
@@ -951,6 +968,8 @@ function startLiveMode() {
         startBtn.style.display = 'none';
         document.getElementById('live-reset-btn').style.display = 'block';
         document.getElementById('live-save-btn').style.display = 'block';
+        var awakeBtn = document.getElementById('live-awake-btn');
+    if (awakeBtn) awakeBtn.style.display = 'block';
 
         // Start polling
         startLivePolling();
@@ -979,6 +998,37 @@ function stopLivePolling() {
     }
     pollInProgress = false;
     updateLiveIndicator(false);
+    disableKeepAwake();
+}
+
+function toggleKeepAwake() {
+    if (noSleepActive) {
+        disableKeepAwake();
+    } else {
+        enableKeepAwake();
+    }
+}
+
+function enableKeepAwake() {
+    noSleep.enable().then(function() {
+        noSleepActive = true;
+        updateAwakeButton(true);
+    }).catch(function(err) {
+        console.log('[KeepAwake] Failed:', err.message);
+    });
+}
+
+function disableKeepAwake() {
+    noSleep.disable();
+    noSleepActive = false;
+    updateAwakeButton(false);
+}
+
+function updateAwakeButton(isOn) {
+    var btn = document.getElementById('live-awake-btn');
+    if (!btn) return;
+    btn.textContent = 'Screen Awake: ' + (isOn ? 'ON' : 'OFF');
+    btn.style.backgroundColor = isOn ? '#53cf6e' : '';
 }
 
 function pollLiveData() {

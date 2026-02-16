@@ -58,6 +58,7 @@
                 <button id="live-start-btn" class="btn btn-success btn-full">Start Live Mode</button>
                 <button id="live-reset-btn" class="btn btn-primary btn-full" style="display: none; margin-top: 8px;">Reset to Now</button>
                 <button id="live-save-btn" class="btn btn-primary btn-full" style="display: none; margin-top: 8px;" onclick="saveLiveMap()">Save Map</button>
+                <button id="live-awake-btn" class="btn btn-primary btn-full" style="display: none; margin-top: 8px;">Screen Awake: OFF</button>
                 <div id="live-save-status" class="save-status" style="display: none;"></div>
             </div>
 
@@ -165,6 +166,7 @@
         </div>
     </div>
 
+    <script src="/static/js/nosleep.min.js"></script>
     <script src="/static/js/map.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap" async defer></script>
