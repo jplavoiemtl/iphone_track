@@ -1182,6 +1182,11 @@ function resetLiveMode() {
         return;
     }
 
+    // Stop any running animation immediately
+    if (typeof stopAnimation === 'function') {
+        stopAnimation();
+    }
+
     stopLivePolling();
 
     // Clear live layer and activity layers from live mode
