@@ -166,6 +166,12 @@
         </div>
     </div>
 
+    <script>
+    // Wake Lock API exists on iOS but requires HTTPS — force NoSleep.js to use video fallback
+    if (location.protocol === 'http:' && 'wakeLock' in navigator) {
+        Object.defineProperty(navigator, 'wakeLock', { value: undefined, configurable: true });
+    }
+    </script>
     <script src="/static/js/nosleep.min.js"></script>
     <script src="/static/js/map.js"></script>
     <script src="/static/js/app.js"></script>

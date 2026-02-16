@@ -702,7 +702,10 @@ function joinLiveSession() {
     document.getElementById('live-reset-btn').style.display = 'block';
     document.getElementById('live-save-btn').style.display = 'block';
     var awakeBtn = document.getElementById('live-awake-btn');
-    if (awakeBtn) awakeBtn.style.display = 'block';
+    if (awakeBtn) {
+        awakeBtn.style.display = 'block';
+        if (window.matchMedia('(max-width: 768px)').matches && !noSleepActive) enableKeepAwake();
+    }
 
     // Decide whether to animate: only if animation hasn't been shown yet this session
     var shouldAnimate = !liveAnimationShown;
@@ -791,7 +794,10 @@ function resumeLiveSession() {
         document.getElementById('live-reset-btn').style.display = 'block';
         document.getElementById('live-save-btn').style.display = 'block';
         var awakeBtn = document.getElementById('live-awake-btn');
-    if (awakeBtn) awakeBtn.style.display = 'block';
+    if (awakeBtn) {
+        awakeBtn.style.display = 'block';
+        if (window.matchMedia('(max-width: 768px)').matches && !noSleepActive) enableKeepAwake();
+    }
 
         // Load existing track on map (with animation for first view after resume)
         if (data.total_points > 0) {
@@ -969,7 +975,10 @@ function startLiveMode() {
         document.getElementById('live-reset-btn').style.display = 'block';
         document.getElementById('live-save-btn').style.display = 'block';
         var awakeBtn = document.getElementById('live-awake-btn');
-    if (awakeBtn) awakeBtn.style.display = 'block';
+    if (awakeBtn) {
+        awakeBtn.style.display = 'block';
+        if (window.matchMedia('(max-width: 768px)').matches && !noSleepActive) enableKeepAwake();
+    }
 
         // Start polling
         startLivePolling();
