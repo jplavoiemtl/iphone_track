@@ -21,7 +21,7 @@ var liveAnimationShown = false;
 // Guard against concurrent polls (if a poll takes longer than the interval)
 var pollInProgress = false;
 
-// Screen keep-awake via NoSleep.js (works over HTTP on iOS)
+// Screen keep-awake via NoSleep.js (video with silent audio track)
 var noSleep = new NoSleep();
 var noSleepActive = false;
 
@@ -1022,6 +1022,11 @@ function enableKeepAwake() {
     noSleep.enable().then(function() {
         noSleepActive = true;
         updateAwakeButton(true);
+        // Hide from CarPlay / Now Playing so it doesn't interfere with Spotify/radio
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = null;
+            navigator.mediaSession.playbackState = 'none';
+        }
     }).catch(function(err) {
         console.log('[KeepAwake] Failed:', err.message);
     });
@@ -1046,7 +1051,12 @@ function pollLiveData() {
 
     // Re-enable keep-awake if it was interrupted (e.g. by pinch-to-zoom on iOS)
     if (noSleepActive && noSleep && !noSleep.isEnabled) {
-        noSleep.enable().catch(function() {});
+        noSleep.enable().then(function() {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = null;
+                navigator.mediaSession.playbackState = 'none';
+            }
+        }).catch(function() {});
     }
 
     fetch('/api/live/poll', {
