@@ -1044,6 +1044,11 @@ function pollLiveData() {
     if (pollInProgress) return;  // Skip if previous poll still in-flight
     pollInProgress = true;
 
+    // Re-enable keep-awake if it was interrupted (e.g. by pinch-to-zoom on iOS)
+    if (noSleepActive && noSleep && !noSleep.isEnabled) {
+        noSleep.enable().catch(function() {});
+    }
+
     fetch('/api/live/poll', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
