@@ -21,9 +21,10 @@ var liveAnimationShown = false;
 // Guard against concurrent polls (if a poll takes longer than the interval)
 var pollInProgress = false;
 
-// Screen keep-awake via NoSleep.js (video with silent audio track)
+// Screen keep-awake: Wake Lock API (HTTPS) or NoSleep.js fallback (HTTP)
 var noSleep = new NoSleep();
 var noSleepActive = false;
+var wakeLock = null;
 
 // History navigation state
 var historyModeActive = false;      // Are we viewing history?
@@ -1019,20 +1020,48 @@ function toggleKeepAwake() {
 }
 
 function enableKeepAwake() {
+    if (navigator.wakeLock) {
+        // HTTPS — use native Wake Lock (no media session conflict with CarPlay)
+        navigator.wakeLock.request('screen').then(function(lock) {
+            wakeLock = lock;
+            noSleepActive = true;
+            updateAwakeButton(true);
+            console.log('[WakeLock] Native Wake Lock acquired');
+            lock.addEventListener('release', function() {
+                console.log('[WakeLock] Released');
+                wakeLock = null;
+                // Re-acquire if still supposed to be active
+                if (noSleepActive) enableKeepAwake();
+            });
+        }).catch(function(err) {
+            console.log('[WakeLock] Failed, falling back to NoSleep:', err.message);
+            enableNoSleepFallback();
+        });
+    } else {
+        enableNoSleepFallback();
+    }
+}
+
+function enableNoSleepFallback() {
     noSleep.enable().then(function() {
         noSleepActive = true;
         updateAwakeButton(true);
+        console.log('[KeepAwake] NoSleep.js fallback activated');
         // Hide from CarPlay / Now Playing so it doesn't interfere with Spotify/radio
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = null;
             navigator.mediaSession.playbackState = 'none';
         }
     }).catch(function(err) {
-        console.log('[KeepAwake] Failed:', err.message);
+        console.log('[KeepAwake] NoSleep fallback failed:', err.message);
     });
 }
 
 function disableKeepAwake() {
+    if (wakeLock) {
+        wakeLock.release();
+        wakeLock = null;
+    }
     noSleep.disable();
     noSleepActive = false;
     updateAwakeButton(false);
@@ -1049,8 +1078,9 @@ function pollLiveData() {
     if (pollInProgress) return;  // Skip if previous poll still in-flight
     pollInProgress = true;
 
-    // Re-enable keep-awake if it was interrupted (e.g. by pinch-to-zoom on iOS)
-    if (noSleepActive && noSleep && !noSleep.isEnabled) {
+    // Re-enable NoSleep.js if interrupted (e.g. by pinch-to-zoom on iOS)
+    // Wake Lock doesn't need this — it re-acquires via its own release event
+    if (noSleepActive && !wakeLock && noSleep && !noSleep.isEnabled) {
         noSleep.enable().then(function() {
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.metadata = null;

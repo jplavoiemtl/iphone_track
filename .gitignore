@@ -1,5 +1,6 @@
 # Secrets
 .env
+certs/
 
 # Python
 __pycache__/
