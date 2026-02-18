@@ -951,7 +951,7 @@ function createDarkModeControl() {
     btn.addEventListener('click', function() {
         cycleDarkMode();
     });
-    map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(btn);
+    map.controls[google.maps.ControlPosition.LEFT_BOTTOM].push(btn);
 }
 
 function _initDarkModePreference() {
@@ -998,10 +998,10 @@ function _updateDarkModeButton() {
         btn.textContent = 'A';
         btn.title = 'Map theme: Auto (tap to change)';
     } else if (darkModePreference === 'dark') {
-        btn.textContent = '\u2600\uFE0F';  // sun
+        btn.textContent = '\uD83C\uDF19';  // moon (current: dark)
         btn.title = 'Map theme: Dark (tap for Light)';
     } else {
-        btn.textContent = '\uD83C\uDF19';  // moon
+        btn.textContent = '\u2600\uFE0F';  // sun (current: light)
         btn.title = 'Map theme: Light (tap for Auto)';
     }
 }

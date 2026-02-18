@@ -350,7 +350,8 @@ body {
 #speed-overlay {
     position: absolute;
     bottom: 100px;
-    right: 10px;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 1000;
     background: rgba(22, 33, 62, 0.92);
     border: 1px solid #0f3460;
