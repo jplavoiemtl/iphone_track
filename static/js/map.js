@@ -11,6 +11,28 @@ var activityConfig = {
     'live': { color: '#4285F4', icon: '\u{1F4CD}', name: 'Live' }
 };
 
+// Dark mode state
+var darkModeEnabled = false;
+var darkModePreference = 'auto';  // 'auto', 'dark', 'light'
+
+var DARK_MAP_STYLES = [
+    { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a2e' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#a0a0b8' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#0f3460' }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#16213e' }] },
+    { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#1a4a7a' }] },
+    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2a5a9a' }] },
+    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#0f3460' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0a1628' }] },
+    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a6fa5' }] },
+    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#16213e' }] },
+    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#0d2b1a' }] },
+    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#0f2235' }] },
+    { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#4a6fa5' }] },
+    { featureType: 'administrative.land_parcel', elementType: 'labels', stylers: [{ visibility: 'off' }] }
+];
+
 function initMap() {
     map = new google.maps.Map(document.getElementById('map'), {
         center: { lat: 45.5017, lng: -73.5673 },
@@ -18,6 +40,8 @@ function initMap() {
         mapTypeId: 'roadmap'
     });
     createLayerControl();
+    createDarkModeControl();
+    _initDarkModePreference();
 }
 
 function clearAllLayers() {
@@ -878,8 +902,13 @@ function updateLayerControl() {
             var stats = layerStats[activityType];
 
             // Single compact row per layer
+            var rowBg = darkModeEnabled ? 'rgba(15, 52, 96, 0.6)' : 'rgba(248,248,248,0.8)';
+            var rowBorder = darkModeEnabled ? '1px solid #16213e' : '1px solid #e0e0e0';
+            var nameColor = darkModeEnabled ? '#e0e0e0' : '#333';
+            var statsColor = darkModeEnabled ? '#a0a0b8' : '#666';
+
             var row = document.createElement('div');
-            row.style.cssText = 'display:flex;align-items:center;padding:4px 6px;background:rgba(248,248,248,0.8);border-radius:6px;border:1px solid #e0e0e0;margin:4px 0;gap:6px;';
+            row.style.cssText = 'display:flex;align-items:center;padding:4px 6px;background:' + rowBg + ';border-radius:6px;border:' + rowBorder + ';margin:4px 0;gap:6px;';
 
             var buttonId = activityType === 'live' ? 'id="live-layer-toggle"' : '';
 
@@ -891,18 +920,150 @@ function updateLayerControl() {
                     Math.floor(durationMins / 60) + 'h' + (durationMins % 60) + 'm' :
                     durationMins + 'm';
                 var avgSpeed = stats.duration > 0 ? (stats.distance / stats.duration * 3600) : 0;
-                statsHtml = '<span style="color:#666;font-size:10px;white-space:nowrap;">' +
+                statsHtml = '<span style="color:' + statsColor + ';font-size:10px;white-space:nowrap;">' +
                     stats.distance.toFixed(1) + 'km ' + durationStr + ' ' + avgSpeed.toFixed(0) + 'km/h</span>';
             }
 
             row.innerHTML =
                 '<span style="font-size:14px;width:18px;text-align:center;flex-shrink:0;">' + config.icon + '</span>' +
-                '<span style="font-weight:500;color:#333;font-size:12px;white-space:nowrap;">' + config.name + '</span>' +
+                '<span style="font-weight:500;color:' + nameColor + ';font-size:12px;white-space:nowrap;">' + config.name + '</span>' +
                 (statsHtml ? statsHtml : '') +
                 '<button ' + buttonId + ' onclick="toggleLayer(\'' + activityType + '\')" style="margin-left:auto;padding:2px 6px;border:none;border-radius:3px;color:white;font-size:9px;font-weight:bold;cursor:pointer;flex-shrink:0;background-color:' + config.color + ';opacity:' + (isVisible ? '1' : '0.5') + ';">' +
                 (isVisible ? 'Hide' : 'Show') + '</button>';
 
             layerList.appendChild(row);
+        }
+    });
+}
+
+// =============================================================================
+// Dark Mode Functions
+// =============================================================================
+
+function createDarkModeControl() {
+    var btn = document.createElement('button');
+    btn.id = 'dark-mode-toggle';
+    btn.title = 'Toggle dark/light map (Auto)';
+    btn.style.cssText = 'margin:8px;width:40px;height:40px;border:none;border-radius:8px;' +
+        'background:rgba(22,33,62,0.95);color:white;font-size:16px;cursor:pointer;' +
+        'box-shadow:0 2px 6px rgba(0,0,0,0.4);';
+    btn.textContent = 'A';
+    btn.addEventListener('click', function() {
+        cycleDarkMode();
+    });
+    map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(btn);
+}
+
+function _initDarkModePreference() {
+    try { darkModePreference = localStorage.getItem('darkMode') || 'auto'; } catch(e) {}
+
+    var enable;
+    if (darkModePreference === 'dark') {
+        enable = true;
+    } else if (darkModePreference === 'light') {
+        enable = false;
+    } else {
+        // Auto: dark from 8pm to 7am
+        var hour = new Date().getHours();
+        enable = (hour >= 20 || hour < 7);
+    }
+
+    _updateDarkModeButton();
+    if (enable) applyDarkMode(true);
+}
+
+function cycleDarkMode() {
+    // Auto -> Dark -> Light -> Auto
+    if (darkModePreference === 'auto') {
+        darkModePreference = 'dark';
+        applyDarkMode(true);
+    } else if (darkModePreference === 'dark') {
+        darkModePreference = 'light';
+        applyDarkMode(false);
+    } else {
+        darkModePreference = 'auto';
+        var hour = new Date().getHours();
+        applyDarkMode(hour >= 20 || hour < 7);
+    }
+
+    _updateDarkModeButton();
+    try { localStorage.setItem('darkMode', darkModePreference); } catch(e) {}
+}
+
+function _updateDarkModeButton() {
+    var btn = document.getElementById('dark-mode-toggle');
+    if (!btn) return;
+
+    if (darkModePreference === 'auto') {
+        btn.textContent = 'A';
+        btn.title = 'Map theme: Auto (tap to change)';
+    } else if (darkModePreference === 'dark') {
+        btn.textContent = '\u2600\uFE0F';  // sun
+        btn.title = 'Map theme: Dark (tap for Light)';
+    } else {
+        btn.textContent = '\uD83C\uDF19';  // moon
+        btn.title = 'Map theme: Light (tap for Auto)';
+    }
+}
+
+function applyDarkMode(enable) {
+    darkModeEnabled = enable;
+
+    // Apply/remove map styles
+    map.setOptions({ styles: enable ? DARK_MAP_STYLES : [] });
+
+    // Update layer panel colors
+    var outer = document.getElementById('layerPanelOuter');
+    if (outer) {
+        outer.style.background = enable ? 'rgba(22, 33, 62, 0.95)' : 'rgba(255,255,255,0.95)';
+        outer.style.border = enable ? '2px solid #0f3460' : '2px solid #666';
+    }
+
+    // Update layer panel text colors
+    _updateLayerPanelTextColors(enable);
+
+    // Rebuild layer rows with correct colors
+    updateLayerControl();
+}
+
+function _updateLayerPanelTextColors(enable) {
+    var textColor = enable ? '#e0e0e0' : '#333';
+    var dimColor = enable ? '#a0a0b8' : '#666';
+    var borderColor = enable ? '#0f3460' : '#ddd';
+
+    // Header
+    var header = document.getElementById('layerPanelHeader');
+    if (header) {
+        var title = header.querySelector('span');
+        if (title) title.style.color = textColor;
+    }
+    var arrow = document.getElementById('layerPanelArrow');
+    if (arrow) arrow.style.color = dimColor;
+
+    // History panel
+    var historyPanel = document.getElementById('history-panel');
+    if (historyPanel) historyPanel.style.borderTop = '1px solid ' + borderColor;
+
+    var ids = ['history-label', 'history-time'];
+    ids.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.color = id === 'history-label' ? textColor : dimColor;
+    });
+
+    var statsIds = ['history-distance', 'history-duration', 'history-speed'];
+    statsIds.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.parentElement.style.color = enable ? '#b0b0c8' : '#555';
+    });
+
+    // History buttons
+    var btnIds = ['history-back10', 'history-back', 'history-forward', 'history-forward10'];
+    btnIds.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.style.background = enable ? '#0f3460' : '#f5f5f5';
+            el.style.border = enable ? '1px solid #1a4a7a' : '1px solid #ccc';
+            el.style.color = enable ? '#e0e0e0' : '';
         }
     });
 }

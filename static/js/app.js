@@ -995,6 +995,7 @@ function startLivePolling() {
     if (livePollingInterval) return;  // Already polling
 
     updateLiveIndicator(true);
+    showSpeedOverlay(true);
     livePollingInterval = setInterval(pollLiveData, LIVE_POLL_INTERVAL_MS);
 
     // Also poll immediately
@@ -1008,6 +1009,7 @@ function stopLivePolling() {
     }
     pollInProgress = false;
     updateLiveIndicator(false);
+    showSpeedOverlay(false);
     disableKeepAwake();
 }
 
@@ -1072,6 +1074,35 @@ function updateAwakeButton(isOn) {
     if (!btn) return;
     btn.textContent = 'Screen Awake: ' + (isOn ? 'ON' : 'OFF');
     btn.style.backgroundColor = isOn ? '#53cf6e' : '';
+}
+
+function showSpeedOverlay(visible) {
+    var overlay = document.getElementById('speed-overlay');
+    if (overlay) overlay.style.display = visible ? 'block' : 'none';
+}
+
+function updateSpeedOverlay() {
+    var overlay = document.getElementById('speed-overlay');
+    var valueEl = document.getElementById('speed-value');
+    if (!overlay || !valueEl) return;
+
+    // Find latest ride across all activity types
+    var latestRide = null;
+    ['car', 'bike', 'other'].forEach(function(type) {
+        var rides = liveRidesData[type];
+        if (rides && rides.length > 0) {
+            var lastRide = rides[rides.length - 1];
+            if (!latestRide || lastRide.end_timestamp > latestRide.end_timestamp) {
+                latestRide = lastRide;
+            }
+        }
+    });
+
+    if (latestRide && latestRide.avg_speed !== undefined) {
+        valueEl.textContent = Math.round(latestRide.avg_speed);
+    } else {
+        valueEl.textContent = '--';
+    }
 }
 
 function pollLiveData() {
@@ -1279,6 +1310,9 @@ function updateCurrentActivityDisplay() {
 
     contentDiv.innerHTML = html;
     currentActivityDiv.style.display = 'block';
+
+    // Update speed overlay with current ride's avg speed
+    updateSpeedOverlay();
 }
 
 function resetLiveMode() {
