@@ -52,8 +52,11 @@ document.addEventListener('DOMContentLoaded', function() {
     var startDateInput = document.getElementById('start-date');
     var endDateInput = document.getElementById('end-date');
 
-    // Default to today
-    var today = new Date().toISOString().split('T')[0];
+    // Default to today (local time, not UTC)
+    var now = new Date();
+    var today = now.getFullYear() + '-' +
+        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getDate()).padStart(2, '0');
     startDateInput.value = today;
     endDateInput.value = today;
 
