@@ -963,9 +963,9 @@ function _initDarkModePreference() {
     } else if (darkModePreference === 'light') {
         enable = false;
     } else {
-        // Auto: dark from 8pm to 7am
+        // Auto: dark from 8pm to 6am
         var hour = new Date().getHours();
-        enable = (hour >= 20 || hour < 7);
+        enable = (hour >= 20 || hour < 6);
     }
 
     _updateDarkModeButton();
@@ -983,7 +983,7 @@ function cycleDarkMode() {
     } else {
         darkModePreference = 'auto';
         var hour = new Date().getHours();
-        applyDarkMode(hour >= 20 || hour < 7);
+        applyDarkMode(hour >= 20 || hour < 6);
     }
 
     _updateDarkModeButton();
