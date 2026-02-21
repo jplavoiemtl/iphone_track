@@ -8,7 +8,7 @@ var activityConfig = {
     'bike': { color: '#FFD700', icon: '\u{1F6B4}', name: 'Bike' },
     'other': { color: '#4444FF', icon: '\u{1F6B6}', name: 'Other' },
     'all': { color: '#FFA500', icon: '\u{1F4CD}', name: 'All' },
-    'live': { color: '#4285F4', icon: '\u{1F4CD}', name: 'Live' }
+    'live': { color: '#FF00FF', icon: '\u{1F4CD}', name: 'Live' }
 };
 
 // Dark mode state
