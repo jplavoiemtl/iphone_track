@@ -1,7 +1,7 @@
 # iPhone Tracker Web App
 
 ## Overview
-This is a web-based GPS activity tracking application designed to visualize and analyze location data from an **OwnTracks** server. It provides a modern, responsive interface for tracking movement history, classifying activities (Car, Bike, Walking), and gaining insights into your trips, all while keeping your data private on your own network.
+This is a web-based GPS activity tracking application designed to visualize and analyze location data from an **OwnTracks** server. It provides a modern, responsive interface for tracking movement history, classifying activities (Car, Bike, Walking), and gaining insights into your trips, all while keeping your data private on your own network.  2026
 
 ## Features
 
