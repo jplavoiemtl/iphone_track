@@ -1063,12 +1063,16 @@ function enableNoSleepFallback() {
 }
 
 function disableKeepAwake() {
+    // Set false BEFORE releasing the lock. The Wake Lock API fires its 'release'
+    // event synchronously in some browsers; if noSleepActive were still true at
+    // that point, the listener in enableKeepAwake() would immediately re-acquire
+    // the lock, making it impossible to turn off.
+    noSleepActive = false;
     if (wakeLock) {
         wakeLock.release();
         wakeLock = null;
     }
     noSleep.disable();
-    noSleepActive = false;
     updateAwakeButton(false);
 }
 
@@ -1328,6 +1332,9 @@ function resetLiveMode() {
         stopAnimation();
     }
 
+    // Remember keep-awake state before stopLivePolling() disables it, so we
+    // can restore it after polling resumes (Reset should not change awake state)
+    var keepAwakeWasActive = noSleepActive;
     stopLivePolling();
 
     // Clear live layer and activity layers from live mode
@@ -1382,6 +1389,9 @@ function resetLiveMode() {
         document.getElementById('live-activity-summary').style.display = 'none';
 
         startLivePolling();
+
+        // Restore keep-awake if it was active before the reset
+        if (keepAwakeWasActive) enableKeepAwake();
     })
     .catch(function(err) {
         resetBtn.disabled = false;

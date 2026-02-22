@@ -39,9 +39,9 @@ function initMap() {
         zoom: 12,
         mapTypeId: 'roadmap'
     });
-    createLayerControl();
-    createDarkModeControl();
-    _initDarkModePreference();
+    _initDarkModePreference();   // read pref + set darkModeEnabled BEFORE controls are created
+    createLayerControl();        // builds panel HTML with correct initial colors
+    createDarkModeControl();     // builds button with correct initial label
 }
 
 function clearAllLayers() {
@@ -849,30 +849,43 @@ function toggleLayer(activityType) {
 var layerPanelCollapsed = false;
 
 function createLayerControl() {
+    // Compute initial colors from darkModeEnabled (set before this is called)
+    var panelBg     = darkModeEnabled ? 'rgba(22, 33, 62, 0.95)' : 'rgba(255,255,255,0.95)';
+    var panelBorder = darkModeEnabled ? '2px solid #0f3460'       : '2px solid #666';
+    var titleColor  = darkModeEnabled ? '#e0e0e0' : '#333';
+    var arrowColor  = darkModeEnabled ? '#a0a0b8' : '#666';
+    var hBorder     = darkModeEnabled ? '1px solid #0f3460' : '1px solid #ddd';
+    var hLabelColor = darkModeEnabled ? '#e0e0e0' : '#333';
+    var hTimeColor  = darkModeEnabled ? '#a0a0b8' : '#666';
+    var hStatsColor = darkModeEnabled ? '#b0b0c8' : '#555';
+    var hBtnBg      = darkModeEnabled ? '#0f3460' : '#f5f5f5';
+    var hBtnBorder  = darkModeEnabled ? '1px solid #1a4a7a' : '1px solid #ccc';
+    var hBtnColor   = darkModeEnabled ? '#e0e0e0' : '';
+
     var controlDiv = document.createElement('div');
     controlDiv.id = 'mapLayerControl';
     controlDiv.innerHTML =
-        '<div id="layerPanelOuter" style="background:rgba(255,255,255,0.95);border:2px solid #666;border-radius:8px;margin:8px 4px;padding:8px 10px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);max-width:calc(100vw - 70px);">' +
+        '<div id="layerPanelOuter" style="background:' + panelBg + ';border:' + panelBorder + ';border-radius:8px;margin:8px 4px;padding:8px 10px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);max-width:calc(100vw - 70px);">' +
         '<div id="layerPanelHeader" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:2px 0;" onclick="toggleLayerPanel()">' +
-            '<span style="font-weight:bold;color:#333;font-size:13px;">Active Layers</span>' +
-            '<span id="layerPanelArrow" style="font-size:10px;color:#666;margin-left:8px;">&#9660;</span>' +
+            '<span style="font-weight:bold;color:' + titleColor + ';font-size:13px;">Active Layers</span>' +
+            '<span id="layerPanelArrow" style="font-size:10px;color:' + arrowColor + ';margin-left:8px;">&#9660;</span>' +
         '</div>' +
         '<div id="layerPanelBody">' +
             '<div id="mapLayerList" style="margin-top:6px;"></div>' +
-            '<div id="history-panel" style="display:none;border-top:1px solid #ddd;margin-top:6px;padding-top:6px;">' +
-                '<div id="history-label" class="history-label live" style="font-weight:bold;color:#333;margin-bottom:4px;"></div>' +
-                '<div id="history-time" style="color:#666;margin-bottom:3px;"></div>' +
-                '<div style="color:#555;font-size:11px;margin-bottom:6px;">' +
+            '<div id="history-panel" style="display:none;border-top:' + hBorder + ';margin-top:6px;padding-top:6px;">' +
+                '<div id="history-label" class="history-label live" style="font-weight:bold;color:' + hLabelColor + ';margin-bottom:4px;"></div>' +
+                '<div id="history-time" style="color:' + hTimeColor + ';margin-bottom:3px;"></div>' +
+                '<div style="color:' + hStatsColor + ';font-size:11px;margin-bottom:6px;">' +
                     '<span id="history-distance">0 km</span> | ' +
                     '<span id="history-duration">0m</span> | ' +
                     '<span id="history-speed">0 km/h</span>' +
                 '</div>' +
                 '<div style="display:flex;justify-content:center;gap:4px;">' +
-                    '<button id="history-back10" onclick="navigateHistory(-10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 10 points">&#171;&#171;</button>' +
-                    '<button id="history-back" onclick="navigateHistory(-1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Back 1 point">&#171;</button>' +
+                    '<button id="history-back10" onclick="navigateHistory(-10)" style="padding:4px 8px;border:' + hBtnBorder + ';border-radius:4px;background:' + hBtnBg + ';color:' + hBtnColor + ';cursor:pointer;font-size:12px;" title="Back 10 points">&#171;&#171;</button>' +
+                    '<button id="history-back" onclick="navigateHistory(-1)" style="padding:4px 8px;border:' + hBtnBorder + ';border-radius:4px;background:' + hBtnBg + ';color:' + hBtnColor + ';cursor:pointer;font-size:12px;" title="Back 1 point">&#171;</button>' +
                     '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:4px 10px;border:none;border-radius:4px;background:#4285F4;color:white;cursor:pointer;font-size:11px;font-weight:bold;">LIVE</button>' +
-                    '<button id="history-forward" onclick="navigateHistory(1)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 1 point">&#187;</button>' +
-                    '<button id="history-forward10" onclick="navigateHistory(10)" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;cursor:pointer;font-size:12px;" title="Forward 10 points">&#187;&#187;</button>' +
+                    '<button id="history-forward" onclick="navigateHistory(1)" style="padding:4px 8px;border:' + hBtnBorder + ';border-radius:4px;background:' + hBtnBg + ';color:' + hBtnColor + ';cursor:pointer;font-size:12px;" title="Forward 1 point">&#187;</button>' +
+                    '<button id="history-forward10" onclick="navigateHistory(10)" style="padding:4px 8px;border:' + hBtnBorder + ';border-radius:4px;background:' + hBtnBg + ';color:' + hBtnColor + ';cursor:pointer;font-size:12px;" title="Forward 10 points">&#187;&#187;</button>' +
                 '</div>' +
             '</div>' +
         '</div>' +
@@ -943,11 +956,20 @@ function updateLayerControl() {
 function createDarkModeControl() {
     var btn = document.createElement('button');
     btn.id = 'dark-mode-toggle';
-    btn.title = 'Toggle dark/light map (Auto)';
     btn.style.cssText = 'margin:8px;width:40px;height:40px;border:none;border-radius:8px;' +
         'background:rgba(22,33,62,0.95);color:white;font-size:16px;cursor:pointer;' +
         'box-shadow:0 2px 6px rgba(0,0,0,0.4);';
-    btn.textContent = 'A';
+    // Set correct initial label from darkModePreference (read before this is called)
+    if (darkModePreference === 'dark') {
+        btn.textContent = '\uD83C\uDF19';
+        btn.title = 'Map theme: Dark (tap for Light)';
+    } else if (darkModePreference === 'light') {
+        btn.textContent = '\u2600\uFE0F';
+        btn.title = 'Map theme: Light (tap for Auto)';
+    } else {
+        btn.textContent = 'A';
+        btn.title = 'Map theme: Auto (tap to change)';
+    }
     btn.addEventListener('click', function() {
         cycleDarkMode();
     });
@@ -968,8 +990,12 @@ function _initDarkModePreference() {
         enable = (hour >= 20 || hour < 6);
     }
 
-    _updateDarkModeButton();
-    if (enable) applyDarkMode(true);
+    // Set state and apply map tile styles. createLayerControl() and
+    // createDarkModeControl() are called AFTER this, so they read darkModeEnabled /
+    // darkModePreference and generate the correct HTML at creation time — no deferred
+    // DOM patching needed and no dependency on idle-event timing.
+    darkModeEnabled = enable;
+    map.setOptions({ styles: enable ? DARK_MAP_STYLES : [] });
 }
 
 function cycleDarkMode() {
