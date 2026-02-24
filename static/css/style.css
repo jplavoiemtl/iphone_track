@@ -363,6 +363,13 @@ body {
     pointer-events: none;
 }
 
+#speed-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 4px;
+}
+
 #speed-value {
     font-size: 36px;
     font-weight: bold;
@@ -373,10 +380,18 @@ body {
 }
 
 #speed-unit {
-    font-size: 12px;
+    font-size: 13px;
     color: #a0a0b8;
     font-family: Arial, sans-serif;
-    margin-top: 2px;
+}
+
+#last-fix-age {
+    font-size: 18px;
+    font-family: Arial, sans-serif;
+    margin-top: 5px;
+    white-space: nowrap;
+    color: #a0a0b8;
+    text-align: center;
 }
 
 /* Timeline */

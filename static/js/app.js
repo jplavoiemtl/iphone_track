@@ -21,6 +21,9 @@ var liveAnimationShown = false;
 // Guard against concurrent polls (if a poll takes longer than the interval)
 var pollInProgress = false;
 
+// 1-second ticker for last-fix age display in speed overlay
+var lastFixInterval = null;
+
 // Screen keep-awake: Wake Lock API (HTTPS) or NoSleep.js fallback (HTTP)
 var noSleep = new NoSleep();
 var noSleepActive = false;
@@ -1001,6 +1004,10 @@ function startLivePolling() {
     showSpeedOverlay(true);
     livePollingInterval = setInterval(pollLiveData, LIVE_POLL_INTERVAL_MS);
 
+    // 1-second ticker for last-fix age in speed overlay
+    lastFixInterval = setInterval(updateLastFixAge, 1000);
+    updateLastFixAge();  // immediate first paint
+
     // Also poll immediately
     pollLiveData();
 }
@@ -1009,6 +1016,10 @@ function stopLivePolling() {
     if (livePollingInterval) {
         clearInterval(livePollingInterval);
         livePollingInterval = null;
+    }
+    if (lastFixInterval) {
+        clearInterval(lastFixInterval);
+        lastFixInterval = null;
     }
     pollInProgress = false;
     updateLiveIndicator(false);
@@ -1081,6 +1092,36 @@ function updateAwakeButton(isOn) {
     if (!btn) return;
     btn.textContent = 'Screen Awake: ' + (isOn ? 'ON' : 'OFF');
     btn.style.backgroundColor = isOn ? '#53cf6e' : '';
+}
+
+function updateLastFixAge() {
+    var el = document.getElementById('last-fix-age');
+    if (!el) return;
+
+    if (!lastDrawnTimestamp) {
+        el.textContent = '\u2299 --';
+        el.style.color = '';
+        return;
+    }
+
+    var ageSecs = Math.floor(Date.now() / 1000) - lastDrawnTimestamp;
+    var text;
+    if (ageSecs >= 3600) {
+        text = Math.floor(ageSecs / 3600) + 'h';
+    } else {
+        var mins = Math.floor(ageSecs / 60);
+        var secs = ageSecs % 60;
+        text = mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
+    }
+    el.textContent = '\u2299 ' + text;
+
+    if (ageSecs < 120) {
+        el.style.color = '#53cf6e';   // green — normal
+    } else if (ageSecs < 300) {
+        el.style.color = '#f0a500';   // orange — stale
+    } else {
+        el.style.color = '#e05252';   // red — phone likely offline
+    }
 }
 
 function showSpeedOverlay(visible) {
