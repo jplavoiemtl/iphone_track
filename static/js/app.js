@@ -5,7 +5,7 @@ var activeLayers = new Set();
 var currentMode = 'datetime';  // 'datetime' | 'live'
 var livePollingInterval = null;
 var liveData = null;
-var LIVE_POLL_INTERVAL_MS = 30000;  // 30 seconds
+var LIVE_POLL_INTERVAL_MS = 20000;  // 20 seconds
 var lastDrawnTimestamp = 0;  // Track last point drawn to avoid missing any
 
 // Live mode ride tracking - to detect when to redraw rich layers
