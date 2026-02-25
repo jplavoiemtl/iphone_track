@@ -740,8 +740,8 @@ def live_start():
         raw_data = fetch_owntracks_data(
             from_dt.strftime('%Y-%m-%d'),
             to_dt.strftime('%Y-%m-%d'),
-            from_dt.strftime('%H:%M'),
-            to_dt.strftime('%H:%M'),
+            from_dt.strftime('%H:%M:%S'),
+            to_dt.strftime('%H:%M:%S'),
             server_ip=config.OWNTRACKS_SERVER_IP,
             server_port=config.OWNTRACKS_SERVER_PORT,
             user=config.OWNTRACKS_USER,
@@ -884,8 +884,8 @@ def live_poll():
     new_data = fetch_owntracks_data(
         from_dt.strftime('%Y-%m-%d'),
         to_dt.strftime('%Y-%m-%d'),
-        from_dt.strftime('%H:%M'),
-        to_dt.strftime('%H:%M'),
+        from_dt.strftime('%H:%M:%S'),
+        to_dt.strftime('%H:%M:%S'),
         server_ip=config.OWNTRACKS_SERVER_IP,
         server_port=config.OWNTRACKS_SERVER_PORT,
         user=config.OWNTRACKS_USER,

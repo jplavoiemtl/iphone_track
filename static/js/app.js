@@ -3,9 +3,11 @@ var activeLayers = new Set();
 
 // Live mode state
 var currentMode = 'datetime';  // 'datetime' | 'live'
-var livePollingInterval = null;
+var pollTimer = null;          // setTimeout handle for next scheduled poll
 var liveData = null;
-var LIVE_POLL_INTERVAL_MS = 20000;  // 20 seconds
+var GPS_INTERVAL_S = 60;       // Expected iPhone send cadence
+var POLL_BUFFER_S = 5;         // OwnTracks receive + Pi processing headroom
+var POLL_PERIOD_S = GPS_INTERVAL_S + POLL_BUFFER_S;  // 65 s — used for all poll scheduling
 var lastDrawnTimestamp = 0;  // Track last point drawn to avoid missing any
 
 // Live mode ride tracking - to detect when to redraw rich layers
@@ -997,26 +999,37 @@ function startLiveMode() {
     });
 }
 
+function schedulePoll(delayMs) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(pollLiveData, delayMs);
+}
+
+function computeAlignedDelay() {
+    var nowSecs = Date.now() / 1000;
+    return Math.max(1000, (lastDrawnTimestamp + POLL_PERIOD_S - nowSecs) * 1000);
+}
+
 function startLivePolling() {
-    if (livePollingInterval) return;  // Already polling
+    if (pollTimer || pollInProgress) return;  // Already polling
 
     updateLiveIndicator(true);
     showSpeedOverlay(true);
-    livePollingInterval = setInterval(pollLiveData, LIVE_POLL_INTERVAL_MS);
 
     // 1-second ticker for last-fix age in speed overlay
     lastFixInterval = setInterval(updateLastFixAge, 1000);
     updateLastFixAge();  // immediate first paint
 
-    // Also poll immediately
-    pollLiveData();
+    // No prior data: poll now. Otherwise align to next expected fix.
+    if (!lastDrawnTimestamp) {
+        schedulePoll(0);
+    } else {
+        schedulePoll(computeAlignedDelay());
+    }
 }
 
 function stopLivePolling() {
-    if (livePollingInterval) {
-        clearInterval(livePollingInterval);
-        livePollingInterval = null;
-    }
+    clearTimeout(pollTimer);
+    pollTimer = null;
     if (lastFixInterval) {
         clearInterval(lastFixInterval);
         lastFixInterval = null;
@@ -1158,6 +1171,10 @@ function pollLiveData() {
     if (pollInProgress) return;  // Skip if previous poll still in-flight
     pollInProgress = true;
 
+    // Phase 19: turn ⊙ white while poll is in flight
+    var ageEl = document.getElementById('last-fix-age');
+    if (ageEl) ageEl.style.color = 'white';
+
     // Re-enable NoSleep.js if interrupted (e.g. by pinch-to-zoom on iOS)
     // Wake Lock doesn't need this — it re-acquires via its own release event
     if (noSleepActive && !wakeLock && noSleep && !noSleep.isEnabled) {
@@ -1180,6 +1197,8 @@ function pollLiveData() {
 
         if (!data.success) {
             console.error('Poll failed:', data.error);
+            updateLastFixAge();                      // Phase 19: restore ⊙ color
+            schedulePoll(POLL_PERIOD_S * 1000);      // Phase 18: retry after one cycle
             return;
         }
 
@@ -1234,10 +1253,19 @@ function pollLiveData() {
 
         // Update history panel display
         updateHistoryPanel();
+
+        // Phase 18: schedule next poll aligned to next expected fix (or retry after one cycle)
+        var hasNewData = data.points_to_draw && data.points_to_draw.length > 0;
+        schedulePoll(hasNewData ? computeAlignedDelay() : POLL_PERIOD_S * 1000);
+
+        // Phase 19: restore ⊙ age-based color now that poll is complete
+        updateLastFixAge();
     })
     .catch(function(err) {
         pollInProgress = false;
         console.error('Poll error:', err.message);
+        updateLastFixAge();                      // Phase 19: restore ⊙ color
+        schedulePoll(POLL_PERIOD_S * 1000);      // Phase 18: retry after one cycle
     });
 }
 

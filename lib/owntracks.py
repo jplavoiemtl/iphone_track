@@ -10,8 +10,10 @@ def fetch_owntracks_data(start_date_str, end_date_str, start_time="00:00", end_t
                          user="owntrcks", device_id="", target_timezone=None,
                          default_timezone="America/Montreal"):
     try:
-        start_datetime = datetime.strptime(f"{start_date_str} {start_time}", "%Y-%m-%d %H:%M")
-        end_datetime = datetime.strptime(f"{end_date_str} {end_time}", "%Y-%m-%d %H:%M")
+        time_fmt = "%Y-%m-%d %H:%M:%S" if len(start_time) > 5 else "%Y-%m-%d %H:%M"
+        start_datetime = datetime.strptime(f"{start_date_str} {start_time}", time_fmt)
+        time_fmt = "%Y-%m-%d %H:%M:%S" if len(end_time) > 5 else "%Y-%m-%d %H:%M"
+        end_datetime = datetime.strptime(f"{end_date_str} {end_time}", time_fmt)
 
         if target_timezone:
             local_tz = target_timezone
