@@ -408,7 +408,11 @@ function startTracking() {
 
         if (info.timestamp) {
             var d = new Date(info.timestamp * 1000);
-            document.getElementById('stat-time').textContent = d.toLocaleTimeString();
+            var isMultiDay = document.getElementById('start-date').value !==
+                             document.getElementById('end-date').value;
+            document.getElementById('stat-time').textContent = isMultiDay
+                ? d.toLocaleDateString('default', { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString()
+                : d.toLocaleTimeString();
         }
     };
 
