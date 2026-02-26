@@ -1422,6 +1422,7 @@ function resetLiveMode() {
     liveRideCounts = { car: 0, bike: 0, other: 0 };
     liveRidePoints = { car: 0, bike: 0, other: 0 };
     liveRidesData = { car: [], bike: [], other: [] };
+    updateSpeedOverlay();  // Clear stale speed value immediately
     liveAnimationShown = false;  // Reset so next data will animate
     resetHistoryState();  // Clear history navigation state
 
