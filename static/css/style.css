@@ -349,7 +349,7 @@ body {
 /* Live speed overlay */
 #speed-overlay {
     position: absolute;
-    bottom: 100px;
+    bottom: 15px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 1000;

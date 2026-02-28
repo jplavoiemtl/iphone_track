@@ -1819,7 +1819,8 @@ function updateHistoryPanel() {
         var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         timeEl.textContent = months[d.getMonth()] + ' ' + d.getDate() + ', ' +
             d.getHours().toString().padStart(2, '0') + ':' +
-            d.getMinutes().toString().padStart(2, '0');
+            d.getMinutes().toString().padStart(2, '0') + ':' +
+            d.getSeconds().toString().padStart(2, '0');
     }
 
     // Update stats
