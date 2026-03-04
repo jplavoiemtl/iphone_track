@@ -229,7 +229,8 @@ def get_track_data(activity_type):
                 "points": len(gps_points)
             },
             "start_time_str": start_local.strftime('%H:%M:%S'),
-            "end_time_str": end_local.strftime('%H:%M:%S')
+            "end_time_str": end_local.strftime('%H:%M:%S'),
+            "tz_name": detected_tz.zone
         })
 
     if activity_type not in activities or not activities[activity_type]:
@@ -281,7 +282,8 @@ def get_track_data(activity_type):
             "duration": stats.get('total_duration', 0),
             "rides": stats.get('count', 0),
             "points": stats.get('total_points', 0)
-        }
+        },
+        "tz_name": detected_tz.zone
     })
 
 
@@ -1015,7 +1017,8 @@ def get_live_track_data(activity_type):
                 "points": len(gps_points)
             },
             "start_time_str": start_local.strftime('%H:%M:%S'),
-            "end_time_str": end_local.strftime('%H:%M:%S')
+            "end_time_str": end_local.strftime('%H:%M:%S'),
+            "tz_name": detected_tz.zone
         })
 
     if activity_type not in activities or not activities[activity_type]:
@@ -1067,7 +1070,8 @@ def get_live_track_data(activity_type):
             "duration": stats.get('total_duration', 0),
             "rides": stats.get('count', 0),
             "points": stats.get('total_points', 0)
-        }
+        },
+        "tz_name": detected_tz.zone
     })
 
 

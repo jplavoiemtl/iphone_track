@@ -1,5 +1,6 @@
 var detectionData = null;
 var activeLayers = new Set();
+var activityTimezone = null;  // IANA timezone from backend (e.g., 'Europe/Paris')
 
 // Live mode state
 var currentMode = 'datetime';  // 'datetime' | 'live'
@@ -422,11 +423,12 @@ function startTracking() {
 
         if (info.timestamp) {
             var d = new Date(info.timestamp * 1000);
+            var tzOpts = activityTimezone ? { timeZone: activityTimezone } : {};
             var isMultiDay = document.getElementById('start-date').value !==
                              document.getElementById('end-date').value;
             document.getElementById('stat-time').textContent = isMultiDay
-                ? d.toLocaleDateString('default', { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString()
-                : d.toLocaleTimeString();
+                ? d.toLocaleDateString('default', Object.assign({ month: 'short', day: 'numeric' }, tzOpts)) + ', ' + d.toLocaleTimeString('default', tzOpts)
+                : d.toLocaleTimeString('default', tzOpts);
         }
     };
 
@@ -489,6 +491,8 @@ function loadLayerAnimated(activityType, callback) {
                 alert('Error loading ' + activityType + ': ' + data.error);
                 return;
             }
+
+            if (data.tz_name) activityTimezone = data.tz_name;
 
             if (data.mode === 'rich') {
                 addRichLayerAnimated(activityType, data.rides, data.stats, callback);
