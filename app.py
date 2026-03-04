@@ -154,7 +154,7 @@ def detect_activities():
                 if not ride['points']:
                     continue
                 start_timestamp = ride['start']
-                end_timestamp = ride['end']
+                end_timestamp = ride['points'][-1]['tst'] if ride['points'] else ride['end']
                 start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
                 end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
 
@@ -168,8 +168,8 @@ def detect_activities():
                     'ride_number': ride_idx + 1,
                     'start_timestamp': start_timestamp,
                     'end_timestamp': end_timestamp,
-                    'start_datetime_str': start_local.strftime('%b %d, %H:%M'),
-                    'end_datetime_str': end_local.strftime('%b %d, %H:%M'),
+                    'start_datetime_str': start_local.strftime('%b %d, %H:%M:%S'),
+                    'end_datetime_str': end_local.strftime('%b %d, %H:%M:%S'),
                     'distance': round(ride_distance, 2),
                     'duration': ride_duration,
                     'avg_speed': round(avg_speed, 1),
@@ -244,7 +244,7 @@ def get_track_data(activity_type):
 
         color = colors[ride_idx % len(colors)]
         start_timestamp = ride['start']
-        end_timestamp = ride['end']
+        end_timestamp = ride['points'][-1]['tst'] if ride['points'] else ride['end']
 
         start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
         end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
@@ -260,8 +260,8 @@ def get_track_data(activity_type):
             'end_timestamp': end_timestamp,
             'start_time_str': start_local.strftime('%H:%M:%S'),
             'end_time_str': end_local.strftime('%H:%M:%S'),
-            'start_datetime_str': start_local.strftime('%b %d, %H:%M'),
-            'end_datetime_str': end_local.strftime('%b %d, %H:%M'),
+            'start_datetime_str': start_local.strftime('%b %d, %H:%M:%S'),
+            'end_datetime_str': end_local.strftime('%b %d, %H:%M:%S'),
             'points': [{"lat": p["lat"], "lng": p["lon"], "tst": p["tst"]} for p in ride['points']],
             'distance': round(ride_distance, 2),
             'duration': ride_duration,
@@ -357,14 +357,15 @@ def save_map():
             for ride_idx, ride in enumerate(activities[layer_type]):
                 if not ride['points']:
                     continue
+                gps_end = ride['points'][-1]['tst'] if ride['points'] else ride['end']
                 s_local = datetime.fromtimestamp(ride['start'], tz=pytz.UTC).astimezone(detected_tz)
-                e_local = datetime.fromtimestamp(ride['end'], tz=pytz.UTC).astimezone(detected_tz)
+                e_local = datetime.fromtimestamp(gps_end, tz=pytz.UTC).astimezone(detected_tz)
                 saved_rides_data[layer_type].append({
                     'start': ride['start'],
-                    'end': ride['end'],
+                    'end': gps_end,
                     'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in ride['points']],
-                    'start_time_str': s_local.strftime('%b %d, %H:%M'),
-                    'end_time_str': e_local.strftime('%b %d, %H:%M'),
+                    'start_time_str': s_local.strftime('%b %d, %H:%M:%S'),
+                    'end_time_str': e_local.strftime('%b %d, %H:%M:%S'),
                     'color': colors[ride_idx % len(colors)]
                 })
 
@@ -1029,7 +1030,7 @@ def get_live_track_data(activity_type):
 
         color = colors[ride_idx % len(colors)]
         start_timestamp = ride['start']
-        end_timestamp = ride['end']
+        end_timestamp = ride['points'][-1]['tst'] if ride['points'] else ride['end']
 
         start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
         end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
@@ -1045,8 +1046,8 @@ def get_live_track_data(activity_type):
             'end_timestamp': end_timestamp,
             'start_time_str': start_local.strftime('%H:%M:%S'),
             'end_time_str': end_local.strftime('%H:%M:%S'),
-            'start_datetime_str': start_local.strftime('%b %d, %H:%M'),
-            'end_datetime_str': end_local.strftime('%b %d, %H:%M'),
+            'start_datetime_str': start_local.strftime('%b %d, %H:%M:%S'),
+            'end_datetime_str': end_local.strftime('%b %d, %H:%M:%S'),
             'points': [{"lat": p["lat"], "lng": p["lon"], "tst": p["tst"]} for p in ride['points']],
             'distance': round(ride_distance, 2),
             'duration': ride_duration,
@@ -1156,14 +1157,15 @@ def live_save_map():
             for ride_idx, ride in enumerate(activities[layer_type]):
                 if not ride['points']:
                     continue
+                gps_end = ride['points'][-1]['tst'] if ride['points'] else ride['end']
                 s_local = datetime.fromtimestamp(ride['start'], tz=pytz.UTC).astimezone(detected_tz)
-                e_local = datetime.fromtimestamp(ride['end'], tz=pytz.UTC).astimezone(detected_tz)
+                e_local = datetime.fromtimestamp(gps_end, tz=pytz.UTC).astimezone(detected_tz)
                 saved_rides_data[layer_type].append({
                     'start': ride['start'],
-                    'end': ride['end'],
+                    'end': gps_end,
                     'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in ride['points']],
-                    'start_time_str': s_local.strftime('%b %d, %H:%M'),
-                    'end_time_str': e_local.strftime('%b %d, %H:%M'),
+                    'start_time_str': s_local.strftime('%b %d, %H:%M:%S'),
+                    'end_time_str': e_local.strftime('%b %d, %H:%M:%S'),
                     'color': colors[ride_idx % len(colors)]
                 })
 

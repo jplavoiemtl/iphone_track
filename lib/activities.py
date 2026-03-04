@@ -233,7 +233,7 @@ def calculate_activity_stats(activities):
             for activity in activity_data:
                 points = activity['points']
                 activity_distance = calculate_track_distance(points)
-                activity_duration = activity['end'] - activity['start']
+                activity_duration = (points[-1]['tst'] if points else activity['end']) - activity['start']
 
                 total_distance += activity_distance
                 total_duration += activity_duration

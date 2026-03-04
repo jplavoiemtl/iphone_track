@@ -60,7 +60,8 @@ def format_ride_end_text(ride, detected_tz):
     Returns string like: "12.5 km | 35m | 21.4 km/h | 14:32-15:07"
     """
     distance = calculate_track_distance(ride['points'])
-    duration = ride['end'] - ride['start']
+    gps_end = ride['points'][-1]['tst'] if ride['points'] else ride['end']
+    duration = gps_end - ride['start']
     avg_speed = (distance / duration * 3600) if duration > 0 else 0
 
     duration_min = int(duration / 60)
@@ -72,7 +73,7 @@ def format_ride_end_text(ride, detected_tz):
         duration_str = f"{duration_min}m"
 
     start_local = datetime.fromtimestamp(ride['start'], tz=pytz.UTC).astimezone(detected_tz)
-    end_local = datetime.fromtimestamp(ride['end'], tz=pytz.UTC).astimezone(detected_tz)
+    end_local = datetime.fromtimestamp(gps_end, tz=pytz.UTC).astimezone(detected_tz)
 
     return (f"{distance:.1f} km | {duration_str} | {avg_speed:.1f} km/h | "
             f"{start_local.strftime('%H:%M')}-{end_local.strftime('%H:%M')}")
