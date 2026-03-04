@@ -1954,47 +1954,6 @@ function onHistorySliderChange() {
     _historySliderDragging = false;
 }
 
-function navigateHistory(delta) {
-    var totalPoints = historyPoints.length;
-    if (totalPoints === 0) return;
-
-    if (!historyModeActive) {
-        // Entering history mode
-        historyModeActive = true;
-        historyViewIndex = totalPoints - 1;
-    }
-
-    // Apply delta
-    historyViewIndex += delta;
-
-    // Clamp to valid range
-    if (historyViewIndex < 0) historyViewIndex = 0;
-    if (historyViewIndex >= totalPoints) {
-        // Reached the end - exit history mode
-        exitHistoryMode();
-        return;
-    }
-
-    // Update polyline display
-    if (typeof truncateLivePolyline === 'function') {
-        truncateLivePolyline(historyViewIndex);
-    }
-
-    // Update position marker
-    var point = historyPoints[historyViewIndex];
-    if (point && typeof updateHistoryMarker === 'function') {
-        updateHistoryMarker(point.lat, point.lng);
-    }
-
-    // Pan map to current position
-    if (point && typeof map !== 'undefined' && map) {
-        map.panTo({ lat: point.lat, lng: point.lng });
-    }
-
-    // Update panel display
-    updateHistoryPanel();
-}
-
 function exitHistoryMode() {
     historyModeActive = false;
     historyViewIndex = -1;
