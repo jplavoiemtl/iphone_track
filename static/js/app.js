@@ -1687,7 +1687,8 @@ function loadLiveTrack(animate, onComplete) {
                 // Animate the initial track playback
                 addBasicLayerAnimated('live', data.points, data.stats,
                     data.start_time_str, data.end_time_str, function() {
-                        // Animation complete - clear callback and update timestamp
+                        // Animation complete - hide playback controls and clear callback
+                        hidePlaybackControls();
                         clearLiveAnimationProgress();
                         lastDrawnTimestamp = data.points[data.points.length - 1].tst;
                         updateHistoryPanel();  // Show history panel after animation
