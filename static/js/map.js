@@ -360,6 +360,7 @@ function stopAnimation() {
     animationBasicStats = null;
     animationBasicConfig = null;
     animationBasicEndTimeStr = null;
+    onAnimationProgress = null;
     updatePauseStatus('');
     hidePlaybackControls();
     var btn = document.getElementById('pause-play-btn');
@@ -908,7 +909,7 @@ function createLayerControl() {
                     '<span id="history-speed">0 km/h</span>' +
                 '</div>' +
                 '<div style="display:flex;align-items:center;gap:6px;">' +
-                    '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:4px 10px;border:none;border-radius:4px;background:#4285F4;color:white;cursor:pointer;font-size:11px;font-weight:bold;flex-shrink:0;">LIVE</button>' +
+                    '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:2px 6px;border:none;border-radius:3px;background:#4285F4;color:white;cursor:pointer;font-size:9px;font-weight:bold;flex-shrink:0;">LIVE</button>' +
                 '</div>' +
                 '<input type="range" id="history-slider" min="0" max="0" value="0" oninput="onHistorySliderInput(this)" onchange="onHistorySliderChange()" style="width:100%;margin-top:4px;">' +
             '</div>' +

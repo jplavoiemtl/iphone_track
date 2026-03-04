@@ -432,7 +432,6 @@ function startTracking() {
 
     loadLayerAnimated(activityType, function() {
         activeLayers.add(activityType);
-        onAnimationProgress = null;
         document.getElementById('start-tracking-btn').disabled = false;
         document.getElementById('start-tracking-btn').textContent = 'Start Tracking';
         updateTrackingInfo();
