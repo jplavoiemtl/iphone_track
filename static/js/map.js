@@ -362,16 +362,24 @@ function stopAnimation() {
     animationBasicEndTimeStr = null;
     updatePauseStatus('');
     hidePlaybackControls();
+    var btn = document.getElementById('pause-play-btn');
+    if (btn) btn.disabled = false;
 }
 
 function togglePause() {
     if (!animationRunning) return;
 
+    var slider = document.getElementById('animation-slider');
+
     if (animationPaused) {
-        // Resume
+        // Resume — only if there are segments ahead
+        if (!_hasMoreSegments()) return;
         animationPaused = false;
         updatePauseStatus('Tracking...');
         updatePlaybackButtons();
+        var btn = document.getElementById('pause-play-btn');
+        if (btn) btn.disabled = false;
+        if (slider) slider.disabled = true;
         if (animationResumeFunc) {
             var fn = animationResumeFunc;
             animationResumeFunc = null;
@@ -386,6 +394,7 @@ function togglePause() {
         }
         updatePauseStatus('PAUSED');
         updatePlaybackButtons();
+        if (slider) slider.disabled = false;
     }
 }
 
@@ -401,10 +410,12 @@ function showPlaybackControls() {
         el.style.display = 'flex';
         var btn = document.getElementById('pause-play-btn');
         if (btn) btn.textContent = 'Pause';
-        var back = document.getElementById('step-back-btn');
-        var fwd = document.getElementById('step-forward-btn');
-        if (back) back.disabled = true;
-        if (fwd) fwd.disabled = true;
+        var slider = document.getElementById('animation-slider');
+        if (slider) {
+            slider.max = animationSegments ? animationSegments.length : 0;
+            slider.value = 0;
+            slider.disabled = true;
+        }
     }
 }
 
@@ -415,19 +426,8 @@ function hidePlaybackControls() {
 
 function updatePlaybackButtons() {
     var btn = document.getElementById('pause-play-btn');
-    var back = document.getElementById('step-back-btn');
-    var fwd = document.getElementById('step-forward-btn');
     if (!btn) return;
-
-    if (animationPaused) {
-        btn.textContent = 'Play';
-        if (back) back.disabled = (animationDrawnSegments.length === 0);
-        if (fwd) fwd.disabled = !_hasMoreSegments();
-    } else {
-        btn.textContent = 'Pause';
-        if (back) back.disabled = true;
-        if (fwd) fwd.disabled = true;
-    }
+    btn.textContent = animationPaused ? 'Play' : 'Pause';
 }
 
 function _hasMoreSegments() {
@@ -472,42 +472,6 @@ function _fireProgress() {
     });
 }
 
-function stepBack() {
-    if (!animationPaused || !animationRunning) return;
-    if (animationDrawnSegments.length === 0) return;
-
-    var entry = animationDrawnSegments.pop();
-    entry.polyline.setMap(null);
-
-    // Remove from layer.paths
-    if (animationLayer) {
-        var idx = animationLayer.paths.indexOf(entry.polyline);
-        if (idx !== -1) animationLayer.paths.splice(idx, 1);
-    }
-
-    animationCurrentIdx--;
-    animationRunningDistance -= entry.distance;
-    if (animationRunningDistance < 0) animationRunningDistance = 0;
-
-    // Pan to current position
-    if (animationDrawnSegments.length > 0) {
-        var last = animationDrawnSegments[animationDrawnSegments.length - 1];
-        map.panTo({ lat: last.lat, lng: last.lng });
-    }
-
-    _fireProgress();
-    updatePlaybackButtons();
-}
-
-function stepForward() {
-    if (!animationPaused || !animationRunning) return;
-    if (!_hasMoreSegments()) return;
-
-    // Draw one segment
-    _drawOneSegment();
-    _fireProgress();
-    updatePlaybackButtons();
-}
 
 function _drawOneSegment() {
     if (animationMode === 'rich') {
@@ -550,7 +514,7 @@ function _drawOneRichSegment() {
         tst: ride.points[i].tst
     });
 
-    map.panTo({ lat: ride.points[i].lat, lng: ride.points[i].lng });
+    if (!_suppressPan) map.panTo({ lat: ride.points[i].lat, lng: ride.points[i].lng });
     animationCurrentIdx++;
 }
 
@@ -584,8 +548,63 @@ function _drawOneBasicSegment() {
         tst: points[animationCurrentIdx].tst
     });
 
-    map.panTo({ lat: points[animationCurrentIdx].lat, lng: points[animationCurrentIdx].lng });
+    if (!_suppressPan) map.panTo({ lat: points[animationCurrentIdx].lat, lng: points[animationCurrentIdx].lng });
     animationCurrentIdx++;
+}
+
+// Suppress panTo during seek operations
+var _suppressPan = false;
+
+function _clearAllDrawnSegments() {
+    for (var i = 0; i < animationDrawnSegments.length; i++) {
+        animationDrawnSegments[i].polyline.setMap(null);
+        if (animationLayer) {
+            var idx = animationLayer.paths.indexOf(animationDrawnSegments[i].polyline);
+            if (idx !== -1) animationLayer.paths.splice(idx, 1);
+        }
+    }
+    animationDrawnSegments = [];
+    animationRunningDistance = 0;
+    animationCurrentIdx = animationMode === 'basic' ? 1 : 0;
+}
+
+function seekAnimation(targetIdx) {
+    if (!animationPaused || !animationRunning) return;
+    if (!animationSegments) return;
+
+    // Clamp target
+    var minIdx = animationMode === 'basic' ? 1 : 0;
+    if (targetIdx < minIdx) targetIdx = minIdx;
+    if (targetIdx > animationSegments.length) targetIdx = animationSegments.length;
+
+    _suppressPan = true;
+
+    if (targetIdx < animationCurrentIdx) {
+        _clearAllDrawnSegments();
+    }
+
+    while (animationCurrentIdx < targetIdx && _hasMoreSegments()) {
+        _drawOneSegment();
+    }
+
+    _suppressPan = false;
+
+    // Pan once to final position
+    if (animationDrawnSegments.length > 0) {
+        var last = animationDrawnSegments[animationDrawnSegments.length - 1];
+        map.panTo({ lat: last.lat, lng: last.lng });
+    }
+
+    _fireProgress();
+
+    var slider = document.getElementById('animation-slider');
+    if (slider) slider.value = animationCurrentIdx;
+
+    // Re-enable Play button if we scrubbed backward (more segments ahead)
+    var btn = document.getElementById('pause-play-btn');
+    if (btn) {
+        btn.disabled = !_hasMoreSegments();
+    }
 }
 
 // Callback for live stats updates during animation
@@ -677,16 +696,22 @@ function addRichLayerAnimated(activityType, ridesData, statsData, onComplete) {
                 addRideMarkers(activityType, ride, layer);
             });
             updateLayerControl();
-            animationRunning = false;
-            updatePauseStatus('');
-            hidePlaybackControls();
-            if (animationOnComplete) animationOnComplete();
+            // Auto-pause at end — keep controls visible for slider scrubbing
+            animationPaused = true;
             animationTimer = null;
+            updatePauseStatus('');
+            var _btn = document.getElementById('pause-play-btn');
+            if (_btn) { _btn.textContent = 'Play'; _btn.disabled = true; }
+            var _sl = document.getElementById('animation-slider');
+            if (_sl) { _sl.disabled = false; _sl.max = segments.length; _sl.value = animationCurrentIdx; }
+            if (animationOnComplete) animationOnComplete();
             return;
         }
 
         _drawOneRichSegment();
         _fireProgress();
+        var _sl = document.getElementById('animation-slider');
+        if (_sl) { _sl.max = segments.length; _sl.value = animationCurrentIdx; }
 
         animationResumeFunc = drawNext;
         animationTimer = setTimeout(drawNext, delayMs);
@@ -802,16 +827,22 @@ function addBasicLayerAnimated(activityType, points, stats, startTimeStr, endTim
             layer.markers.push(endMarker);
 
             updateLayerControl();
-            animationRunning = false;
-            updatePauseStatus('');
-            hidePlaybackControls();
-            if (animationOnComplete) animationOnComplete();
+            // Auto-pause at end — keep controls visible for slider scrubbing
+            animationPaused = true;
             animationTimer = null;
+            updatePauseStatus('');
+            var _btn = document.getElementById('pause-play-btn');
+            if (_btn) { _btn.textContent = 'Play'; _btn.disabled = true; }
+            var _sl2 = document.getElementById('animation-slider');
+            if (_sl2) { _sl2.disabled = false; _sl2.max = points.length; _sl2.value = animationCurrentIdx; }
+            if (animationOnComplete) animationOnComplete();
             return;
         }
 
         _drawOneBasicSegment();
         _fireProgress();
+        var _sl = document.getElementById('animation-slider');
+        if (_sl) { _sl.max = points.length; _sl.value = animationCurrentIdx; }
 
         animationResumeFunc = drawNext;
         animationTimer = setTimeout(drawNext, delayMs);
@@ -858,10 +889,6 @@ function createLayerControl() {
     var hLabelColor = darkModeEnabled ? '#e0e0e0' : '#333';
     var hTimeColor  = darkModeEnabled ? '#a0a0b8' : '#666';
     var hStatsColor = darkModeEnabled ? '#b0b0c8' : '#555';
-    var hBtnBg      = darkModeEnabled ? '#0f3460' : '#f5f5f5';
-    var hBtnBorder  = darkModeEnabled ? '1px solid #1a4a7a' : '1px solid #ccc';
-    var hBtnColor   = darkModeEnabled ? '#e0e0e0' : '';
-
     var controlDiv = document.createElement('div');
     controlDiv.id = 'mapLayerControl';
     controlDiv.innerHTML =
@@ -880,13 +907,10 @@ function createLayerControl() {
                     '<span id="history-duration">0m</span> | ' +
                     '<span id="history-speed">0 km/h</span>' +
                 '</div>' +
-                '<div style="display:flex;justify-content:center;gap:4px;">' +
-                    '<button id="history-back10" onclick="navigateHistory(-10)" style="padding:4px 8px;border:' + hBtnBorder + ';border-radius:4px;background:' + hBtnBg + ';color:' + hBtnColor + ';cursor:pointer;font-size:12px;" title="Back 10 points">&#171;&#171;</button>' +
-                    '<button id="history-back" onclick="navigateHistory(-1)" style="padding:4px 8px;border:' + hBtnBorder + ';border-radius:4px;background:' + hBtnBg + ';color:' + hBtnColor + ';cursor:pointer;font-size:12px;" title="Back 1 point">&#171;</button>' +
-                    '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:4px 10px;border:none;border-radius:4px;background:#4285F4;color:white;cursor:pointer;font-size:11px;font-weight:bold;">LIVE</button>' +
-                    '<button id="history-forward" onclick="navigateHistory(1)" style="padding:4px 8px;border:' + hBtnBorder + ';border-radius:4px;background:' + hBtnBg + ';color:' + hBtnColor + ';cursor:pointer;font-size:12px;" title="Forward 1 point">&#187;</button>' +
-                    '<button id="history-forward10" onclick="navigateHistory(10)" style="padding:4px 8px;border:' + hBtnBorder + ';border-radius:4px;background:' + hBtnBg + ';color:' + hBtnColor + ';cursor:pointer;font-size:12px;" title="Forward 10 points">&#187;&#187;</button>' +
+                '<div style="display:flex;align-items:center;gap:6px;">' +
+                    '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:4px 10px;border:none;border-radius:4px;background:#4285F4;color:white;cursor:pointer;font-size:11px;font-weight:bold;flex-shrink:0;">LIVE</button>' +
                 '</div>' +
+                '<input type="range" id="history-slider" min="0" max="0" value="0" oninput="onHistorySliderInput(this)" onchange="onHistorySliderChange()" style="width:100%;margin-top:4px;">' +
             '</div>' +
         '</div>' +
         '</div>';
@@ -1082,16 +1106,11 @@ function _updateLayerPanelTextColors(enable) {
         if (el) el.parentElement.style.color = enable ? '#b0b0c8' : '#555';
     });
 
-    // History buttons
-    var btnIds = ['history-back10', 'history-back', 'history-forward', 'history-forward10'];
-    btnIds.forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) {
-            el.style.background = enable ? '#0f3460' : '#f5f5f5';
-            el.style.border = enable ? '1px solid #1a4a7a' : '1px solid #ccc';
-            el.style.color = enable ? '#e0e0e0' : '';
-        }
-    });
+    // History slider
+    var histSlider = document.getElementById('history-slider');
+    if (histSlider) {
+        histSlider.style.background = enable ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)';
+    }
 }
 
 // =============================================================================

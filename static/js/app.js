@@ -37,6 +37,9 @@ var historyViewIndex = -1;          // Current view point index (-1 = live/lates
 var historyPoints = [];             // All live points for navigation
 var historyCumulativeStats = [];    // Pre-calculated stats per point: [{tst, distance, duration, pointCount}]
 
+// History slider dragging flag (prevents feedback loops)
+var _historySliderDragging = false;
+
 // Toggle past activities visibility (live mode)
 function togglePastActivities() {
     var summary = document.getElementById('live-activity-summary');
@@ -156,20 +159,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Playback controls
     document.getElementById('pause-play-btn').addEventListener('click', togglePause);
-    document.getElementById('step-back-btn').addEventListener('click', stepBack);
-    document.getElementById('step-forward-btn').addEventListener('click', stepForward);
+    document.getElementById('animation-slider').addEventListener('input', function() {
+        seekAnimation(parseInt(this.value, 10));
+    });
 
-    // Spacebar pause/resume, arrow keys for step
+    // Spacebar pause/resume, arrow keys for slider scrub
     document.addEventListener('keydown', function(e) {
         if (e.code === 'Space' && animationRunning) {
             e.preventDefault();
             togglePause();
         } else if (e.code === 'ArrowLeft' && animationPaused && animationRunning) {
             e.preventDefault();
-            stepBack();
+            var slider = document.getElementById('animation-slider');
+            if (slider) {
+                var newVal = Math.max(parseInt(slider.value, 10) - 1, parseInt(slider.min, 10));
+                slider.value = newVal;
+                seekAnimation(newVal);
+            }
         } else if (e.code === 'ArrowRight' && animationPaused && animationRunning) {
             e.preventDefault();
-            stepForward();
+            var slider = document.getElementById('animation-slider');
+            if (slider) {
+                var newVal = Math.min(parseInt(slider.value, 10) + 1, parseInt(slider.max, 10));
+                slider.value = newVal;
+                seekAnimation(newVal);
+            }
         }
     });
 });
@@ -875,6 +889,13 @@ function switchToLiveMode() {
     // Stop any ongoing animation from datetime mode
     if (typeof stopAnimation === 'function') {
         stopAnimation();
+    }
+
+    // Reset tracking button in case animation was interrupted mid-track
+    var trackBtn = document.getElementById('start-tracking-btn');
+    if (trackBtn) {
+        trackBtn.disabled = false;
+        trackBtn.textContent = 'Start Tracking';
     }
 
     // Clear any stale history navigation state
@@ -1847,29 +1868,22 @@ function updateHistoryPanel() {
         speedEl.textContent = avgSpeed.toFixed(1) + ' km/h';
     }
 
+    // Update slider
+    var slider = document.getElementById('history-slider');
+    if (slider) {
+        slider.max = totalPoints - 1;
+        if (!_historySliderDragging) {
+            slider.value = viewIndex;
+        }
+    }
+
     // Update button states
     updateHistoryButtons();
 }
 
 function updateHistoryButtons() {
     var totalPoints = historyPoints.length;
-    var viewIndex = historyModeActive ? historyViewIndex : totalPoints - 1;
-
-    var backBtn = document.getElementById('history-back');
-    var back10Btn = document.getElementById('history-back10');
-    var fwdBtn = document.getElementById('history-forward');
-    var fwd10Btn = document.getElementById('history-forward10');
     var liveBtn = document.getElementById('history-live');
-
-    // Back buttons: disabled at first point
-    var atStart = viewIndex <= 0;
-    if (backBtn) backBtn.disabled = atStart;
-    if (back10Btn) back10Btn.disabled = atStart;
-
-    // Forward buttons: disabled at last point (live mode)
-    var atEnd = viewIndex >= totalPoints - 1;
-    if (fwdBtn) fwdBtn.disabled = atEnd;
-    if (fwd10Btn) fwd10Btn.disabled = atEnd;
 
     // Live/Old button: show "Old" when at live position, "LIVE" when in history
     if (liveBtn) {
@@ -1891,6 +1905,49 @@ function updateHistoryButtons() {
         liveLayerToggle.style.opacity = historyModeActive ? '0.4' : '1';
         liveLayerToggle.style.cursor = historyModeActive ? 'not-allowed' : 'pointer';
     }
+}
+
+function onHistorySliderInput(slider) {
+    _historySliderDragging = true;
+    var targetIndex = parseInt(slider.value, 10);
+    var totalPoints = historyPoints.length;
+    if (totalPoints === 0) return;
+
+    if (targetIndex >= totalPoints - 1) {
+        // At max — exit history mode
+        exitHistoryMode();
+        return;
+    }
+
+    // Enter history mode if needed
+    if (!historyModeActive) {
+        historyModeActive = true;
+    }
+
+    historyViewIndex = targetIndex;
+
+    // Update polyline display
+    if (typeof truncateLivePolyline === 'function') {
+        truncateLivePolyline(historyViewIndex);
+    }
+
+    // Update position marker
+    var point = historyPoints[historyViewIndex];
+    if (point && typeof updateHistoryMarker === 'function') {
+        updateHistoryMarker(point.lat, point.lng);
+    }
+
+    // Pan map to current position
+    if (point && typeof map !== 'undefined' && map) {
+        map.panTo({ lat: point.lat, lng: point.lng });
+    }
+
+    // Update panel display (slider value won't be reset because _historySliderDragging is true)
+    updateHistoryPanel();
+}
+
+function onHistorySliderChange() {
+    _historySliderDragging = false;
 }
 
 function navigateHistory(delta) {
@@ -1956,6 +2013,12 @@ function exitHistoryMode() {
         }
     }
 
+    // Set slider to max
+    var slider = document.getElementById('history-slider');
+    if (slider) {
+        slider.value = slider.max;
+    }
+
     // Update panel display
     updateHistoryPanel();
 }
@@ -1987,6 +2050,12 @@ function handleHistoryJumpButton() {
         // Pan map to first point
         if (point && typeof map !== 'undefined' && map) {
             map.panTo({ lat: point.lat, lng: point.lng });
+        }
+
+        // Set slider to 0
+        var slider = document.getElementById('history-slider');
+        if (slider) {
+            slider.value = 0;
         }
 
         // Update panel display

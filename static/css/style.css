@@ -797,6 +797,17 @@ body {
         font-size: 24px;
     }
 
+    /* Larger slider thumb for touch */
+    input[type="range"]::-webkit-slider-thumb {
+        width: 28px;
+        height: 28px;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+        width: 28px;
+        height: 28px;
+    }
+
     /* Overlay backdrop when sidebar is open */
     #sidebar-backdrop {
         display: none;
@@ -870,4 +881,49 @@ body {
 
 #history-panel button:not(:disabled):hover {
     background: #e0e0e0;
+}
+
+/* ============================
+   Range Slider Styling
+   ============================ */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #4285F4;
+    cursor: pointer;
+    border: 2px solid white;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #4285F4;
+    cursor: pointer;
+    border: 2px solid white;
+}
+
+#animation-slider {
+    flex: 1;
+    margin-left: 8px;
+}
+
+#animation-slider:disabled {
+    opacity: 0.5;
+}
+
+#history-slider {
+    width: 100%;
+    margin-top: 4px;
 }
