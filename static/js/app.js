@@ -1093,6 +1093,13 @@ function enableKeepAwake() {
         });
     }).catch(function(err) {
         console.log('[WakeLock] Failed:', err.message);
+        // Retry after a short delay — failure is likely transient (e.g., screen
+        // was momentarily off during a release-reacquire cycle)
+        if (wakeLockActive) {
+            setTimeout(function() {
+                if (wakeLockActive) enableKeepAwake();
+            }, 3000);
+        }
     });
 }
 
