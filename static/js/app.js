@@ -27,9 +27,8 @@ var pollInProgress = false;
 // 1-second ticker for last-fix age display in speed overlay
 var lastFixInterval = null;
 
-// Screen keep-awake: Wake Lock API (HTTPS) or NoSleep.js fallback (HTTP)
-var noSleep = new NoSleep();
-var noSleepActive = false;
+// Screen keep-awake via native Wake Lock API (HTTPS required)
+var wakeLockActive = false;
 var wakeLock = null;
 
 // History navigation state
@@ -734,7 +733,7 @@ function joinLiveSession() {
     var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) {
         awakeBtn.style.display = 'block';
-        if (window.matchMedia('(max-width: 768px)').matches && !noSleepActive) enableKeepAwake();
+        if (window.matchMedia('(max-width: 768px)').matches && !wakeLockActive) enableKeepAwake();
     }
 
     // Decide whether to animate: only if animation hasn't been shown yet this session
@@ -826,7 +825,7 @@ function resumeLiveSession() {
         var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) {
         awakeBtn.style.display = 'block';
-        if (window.matchMedia('(max-width: 768px)').matches && !noSleepActive) enableKeepAwake();
+        if (window.matchMedia('(max-width: 768px)').matches && !wakeLockActive) enableKeepAwake();
     }
 
         // Load existing track on map (with animation for first view after resume)
@@ -1014,7 +1013,7 @@ function startLiveMode() {
         var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) {
         awakeBtn.style.display = 'block';
-        if (window.matchMedia('(max-width: 768px)').matches && !noSleepActive) enableKeepAwake();
+        if (window.matchMedia('(max-width: 768px)').matches && !wakeLockActive) enableKeepAwake();
     }
 
         // Start polling
@@ -1069,7 +1068,7 @@ function stopLivePolling() {
 }
 
 function toggleKeepAwake() {
-    if (noSleepActive) {
+    if (wakeLockActive) {
         disableKeepAwake();
     } else {
         enableKeepAwake();
@@ -1077,54 +1076,36 @@ function toggleKeepAwake() {
 }
 
 function enableKeepAwake() {
-    if (navigator.wakeLock) {
-        // HTTPS — use native Wake Lock (no media session conflict with CarPlay)
-        navigator.wakeLock.request('screen').then(function(lock) {
-            wakeLock = lock;
-            noSleepActive = true;
-            updateAwakeButton(true);
-            console.log('[WakeLock] Native Wake Lock acquired');
-            lock.addEventListener('release', function() {
-                console.log('[WakeLock] Released');
-                wakeLock = null;
-                // Re-acquire if still supposed to be active
-                if (noSleepActive) enableKeepAwake();
-            });
-        }).catch(function(err) {
-            console.log('[WakeLock] Failed, falling back to NoSleep:', err.message);
-            enableNoSleepFallback();
-        });
-    } else {
-        enableNoSleepFallback();
+    if (!navigator.wakeLock) {
+        console.log('[WakeLock] Wake Lock API not available');
+        return;
     }
-}
-
-function enableNoSleepFallback() {
-    noSleep.enable().then(function() {
-        noSleepActive = true;
+    navigator.wakeLock.request('screen').then(function(lock) {
+        wakeLock = lock;
+        wakeLockActive = true;
         updateAwakeButton(true);
-        console.log('[KeepAwake] NoSleep.js fallback activated');
-        // Hide from CarPlay / Now Playing so it doesn't interfere with Spotify/radio
-        if ('mediaSession' in navigator) {
-            navigator.mediaSession.metadata = null;
-            navigator.mediaSession.playbackState = 'none';
-        }
+        console.log('[WakeLock] Native Wake Lock acquired');
+        lock.addEventListener('release', function() {
+            console.log('[WakeLock] Released');
+            wakeLock = null;
+            // Re-acquire if still supposed to be active
+            if (wakeLockActive) enableKeepAwake();
+        });
     }).catch(function(err) {
-        console.log('[KeepAwake] NoSleep fallback failed:', err.message);
+        console.log('[WakeLock] Failed:', err.message);
     });
 }
 
 function disableKeepAwake() {
     // Set false BEFORE releasing the lock. The Wake Lock API fires its 'release'
-    // event synchronously in some browsers; if noSleepActive were still true at
+    // event synchronously in some browsers; if wakeLockActive were still true at
     // that point, the listener in enableKeepAwake() would immediately re-acquire
     // the lock, making it impossible to turn off.
-    noSleepActive = false;
+    wakeLockActive = false;
     if (wakeLock) {
         wakeLock.release();
         wakeLock = null;
     }
-    noSleep.disable();
     updateAwakeButton(false);
 }
 
@@ -1202,17 +1183,6 @@ function pollLiveData() {
     // Phase 19: turn ⊙ white while poll is in flight
     var ageEl = document.getElementById('last-fix-age');
     if (ageEl) ageEl.style.color = 'white';
-
-    // Re-enable NoSleep.js if interrupted (e.g. by pinch-to-zoom on iOS)
-    // Wake Lock doesn't need this — it re-acquires via its own release event
-    if (noSleepActive && !wakeLock && noSleep && !noSleep.isEnabled) {
-        noSleep.enable().then(function() {
-            if ('mediaSession' in navigator) {
-                navigator.mediaSession.metadata = null;
-                navigator.mediaSession.playbackState = 'none';
-            }
-        }).catch(function() {});
-    }
 
     fetch('/api/live/poll', {
         method: 'POST',
@@ -1432,7 +1402,7 @@ function resetLiveMode() {
 
     // Remember keep-awake state before stopLivePolling() disables it, so we
     // can restore it after polling resumes (Reset should not change awake state)
-    var keepAwakeWasActive = noSleepActive;
+    var keepAwakeWasActive = wakeLockActive;
     stopLivePolling();
 
     // Clear live layer and activity layers from live mode

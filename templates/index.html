@@ -172,15 +172,6 @@
         </div>
     </div>
 
-    <script>
-    // On HTTP: Wake Lock API exists on iOS but doesn't work (requires HTTPS).
-    // Mask it so both our code and NoSleep.js use the video fallback.
-    // On HTTPS: this doesn't run — native Wake Lock is used directly.
-    if (location.protocol === 'http:' && 'wakeLock' in navigator) {
-        Object.defineProperty(navigator, 'wakeLock', { value: undefined, configurable: true });
-    }
-    </script>
-    <script src="/static/js/nosleep.min.js"></script>
     <script src="/static/js/map.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap" async defer></script>
