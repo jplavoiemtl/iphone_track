@@ -62,7 +62,7 @@ def index():
 
 @app.route("/api/detect", methods=["POST"])
 def detect_activities():
-    data = request.get_json()
+    data = request.get_json() or {}
     start_date = data.get("start_date")
     end_date = data.get("end_date")
     start_time = data.get("start_time", "00:00")
