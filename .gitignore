@@ -20,6 +20,7 @@ saved_maps/
 doc/
 
 # Data files
+gunicorn.ctl
 GPS_activity_markers.json
 live_mode_state.json
 push_notification_state.json
