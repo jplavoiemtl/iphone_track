@@ -293,7 +293,7 @@ def save_map():
     if not cache.get("activities"):
         return jsonify({"success": False, "error": "No detection data. Run detect first."}), 400
 
-    data = request.get_json()
+    data = request.get_json() or {}
     active_layers = data.get("active_layers", [])
 
     if not active_layers:
