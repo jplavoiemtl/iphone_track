@@ -5,7 +5,7 @@ WORKDIR /app
 # Install dependencies first (layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir gunicorn
+    && pip install --no-cache-dir gunicorn gevent
 
 # Copy application code
 COPY app.py config.py ./
