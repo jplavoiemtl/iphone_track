@@ -101,6 +101,7 @@ function addRichLayer(activityType, ridesData, statsData, skipFitBounds) {
 
     var config = activityConfig[activityType] || activityConfig['all'];
     var layer = activityLayers[activityType];
+    layer.ridesData = ridesData;
 
     // Store stats for layer control display
     if (statsData) {
@@ -145,6 +146,8 @@ function addBasicLayer(activityType, points, stats, startTimeStr, endTimeStr) {
 
     var config = activityConfig[activityType] || activityConfig['all'];
     var layer = activityLayers[activityType];
+    layer.basicPoints = points;
+    layer.basicColor = config.color;
 
     // Store stats for layer control display
     if (stats) {
@@ -635,6 +638,7 @@ function addRichLayerAnimated(activityType, ridesData, statsData, onComplete) {
     }
 
     var layer = activityLayers[activityType];
+    layer.ridesData = ridesData;
 
     // Store stats for layer control display
     if (statsData) {
@@ -729,6 +733,8 @@ function addBasicLayerAnimated(activityType, points, stats, startTimeStr, endTim
 
     var config = activityConfig[activityType] || activityConfig['all'];
     var layer = activityLayers[activityType];
+    layer.basicPoints = points;
+    layer.basicColor = config.color;
 
     // Store stats for layer control display
     if (stats) {
@@ -1304,4 +1310,32 @@ function clearHistoryState() {
     }
     livePathsHidden = false;
     removeHistoryMarker();
+}
+
+function getLayerTrackData() {
+    var tracks = [];
+    var keys = Object.keys(activityLayers);
+    for (var k = 0; k < keys.length; k++) {
+        var type = keys[k];
+        var layer = activityLayers[type];
+        if (!layer.visible) continue;
+
+        if (type === 'live' && livePolylinePath && livePolylinePath.getLength() >= 2) {
+            var pts = [];
+            for (var i = 0; i < livePolylinePath.getLength(); i++) {
+                var ll = livePolylinePath.getAt(i);
+                pts.push({ lat: ll.lat(), lng: ll.lng() });
+            }
+            tracks.push({ points: pts, color: activityConfig['live'].color });
+        } else if (layer.ridesData) {
+            layer.ridesData.forEach(function (ride) {
+                if (ride.points && ride.points.length >= 2) {
+                    tracks.push({ points: ride.points, color: ride.color });
+                }
+            });
+        } else if (layer.basicPoints && layer.basicPoints.length >= 2) {
+            tracks.push({ points: layer.basicPoints, color: layer.basicColor });
+        }
+    }
+    return tracks;
 }

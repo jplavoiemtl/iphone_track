@@ -578,6 +578,412 @@ function saveLiveMap() {
     });
 }
 
+// =============================================================================
+// Track Art Image Generation
+// =============================================================================
+
+function generateTrackImage(tracks, statsObj, filename) {
+    var totalPoints = 0;
+    for (var t = 0; t < tracks.length; t++) {
+        totalPoints += tracks[t].points.length;
+    }
+    if (totalPoints < 2) {
+        alert('Not enough GPS points to generate an image.');
+        return;
+    }
+
+    var W = 1080, H = 1920;
+    var marginX = 80, topPad = 120;
+    var drawW = W - marginX * 2;  // 920
+    var drawH = 1300;
+    var drawX = marginX, drawY = topPad;
+
+    // Compute lat/lng bounding box
+    var minLat = Infinity, maxLat = -Infinity;
+    var minLng = Infinity, maxLng = -Infinity;
+    for (var t = 0; t < tracks.length; t++) {
+        var pts = tracks[t].points;
+        for (var i = 0; i < pts.length; i++) {
+            if (pts[i].lat < minLat) minLat = pts[i].lat;
+            if (pts[i].lat > maxLat) maxLat = pts[i].lat;
+            if (pts[i].lng < minLng) minLng = pts[i].lng;
+            if (pts[i].lng > maxLng) maxLng = pts[i].lng;
+        }
+    }
+
+    // Add 15% padding so track doesn't touch edges
+    var latPad = Math.max((maxLat - minLat) * 0.15, 0.001);
+    var lngPad = Math.max((maxLng - minLng) * 0.15, 0.001);
+    minLat -= latPad; maxLat += latPad;
+    minLng -= lngPad; maxLng += lngPad;
+
+    // Web Mercator tile helpers
+    function lngToTileX(lng, z) { return (lng + 180) / 360 * (1 << z); }
+    function latToTileY(lat, z) {
+        var r = lat * Math.PI / 180;
+        return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * (1 << z);
+    }
+
+    // Find highest zoom where padded bbox fits in drawing area
+    var zoom = 1;
+    for (var z = 20; z >= 1; z--) {
+        var pxW = (lngToTileX(maxLng, z) - lngToTileX(minLng, z)) * 256;
+        var pxH = (latToTileY(minLat, z) - latToTileY(maxLat, z)) * 256;
+        if (pxW <= drawW && pxH <= drawH) { zoom = z; break; }
+    }
+
+    // World pixel coordinates at chosen zoom
+    var worldSize = 256 * (1 << zoom);
+    function lngToPx(lng) { return (lng + 180) / 360 * worldSize; }
+    function latToPx(lat) {
+        var r = lat * Math.PI / 180;
+        return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * worldSize;
+    }
+
+    // Bbox in world pixels, centered in drawing area
+    var wpxLeft = lngToPx(minLng), wpxRight = lngToPx(maxLng);
+    var wpxTop = latToPx(maxLat), wpxBottom = latToPx(minLat);
+    var bboxPxW = wpxRight - wpxLeft, bboxPxH = wpxBottom - wpxTop;
+    var offX = drawX + (drawW - bboxPxW) / 2 - wpxLeft;
+    var offY = drawY + (drawH - bboxPxH) / 2 - wpxTop;
+
+    function projectX(lng) { return offX + lngToPx(lng); }
+    function projectY(lat) { return offY + latToPx(lat); }
+
+    // Determine which tiles cover the drawing area
+    var txMin = Math.floor(wpxLeft / 256), txMax = Math.floor(wpxRight / 256);
+    var tyMin = Math.floor(wpxTop / 256), tyMax = Math.floor(wpxBottom / 256);
+
+    // Load dark basemap tiles, then draw everything
+    var tileImages = [];
+    var loaded = 0;
+    var total = (txMax - txMin + 1) * (tyMax - tyMin + 1);
+    var subs = ['a', 'b', 'c'];
+
+    function drawCanvas() {
+        var canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        var ctx = canvas.getContext('2d');
+
+        // Dark background
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, W, H);
+
+        // Draw map tiles (clipped to drawing area) at reduced opacity for dark feel
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(drawX, drawY, drawW, drawH);
+        ctx.clip();
+        ctx.globalAlpha = 0.45;
+        for (var i = 0; i < tileImages.length; i++) {
+            var ti = tileImages[i];
+            if (ti.img.naturalWidth > 0) {
+                ctx.drawImage(ti.img, offX + ti.tx * 256, offY + ti.ty * 256, 256, 256);
+            }
+        }
+        ctx.globalAlpha = 1.0;
+        ctx.restore();
+
+        // Draw tracks (clipped to drawing area)
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(drawX, drawY, drawW, drawH);
+        ctx.clip();
+        for (var t = 0; t < tracks.length; t++) {
+            var track = tracks[t];
+            var pts = track.points;
+            if (pts.length < 2) continue;
+
+            ctx.strokeStyle = track.color;
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowColor = track.color;
+            ctx.shadowBlur = 8;
+
+            ctx.beginPath();
+            ctx.moveTo(projectX(pts[0].lng), projectY(pts[0].lat));
+            for (var i = 1; i < pts.length; i++) {
+                ctx.lineTo(projectX(pts[i].lng), projectY(pts[i].lat));
+            }
+            ctx.stroke();
+
+            // Direction arrows along track
+            var arrowSpacing = 120;
+            var accumulated = 0;
+            for (var i = 1; i < pts.length; i++) {
+                var x0 = projectX(pts[i - 1].lng), y0 = projectY(pts[i - 1].lat);
+                var x1 = projectX(pts[i].lng), y1 = projectY(pts[i].lat);
+                var dx = x1 - x0, dy = y1 - y0;
+                var segLen = Math.sqrt(dx * dx + dy * dy);
+                accumulated += segLen;
+                if (accumulated >= arrowSpacing && segLen > 2) {
+                    accumulated = 0;
+                    var angle = Math.atan2(dy, dx);
+                    var mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+                    ctx.save();
+                    ctx.translate(mx, my);
+                    ctx.rotate(angle);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.beginPath();
+                    ctx.moveTo(6, 0);
+                    ctx.lineTo(-5, -4);
+                    ctx.lineTo(-5, 4);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+        }
+        ctx.restore();
+
+        // Stats overlay background
+        var statsY = 1440;
+        var statsH = H - statsY;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, statsY, W, statsH);
+
+        // Date line with rides count
+        var dateLine = statsObj.date || '';
+        if (statsObj.rides) {
+            dateLine += '  \u2022  ' + statsObj.rides + (statsObj.rides === 1 ? ' ride' : ' rides');
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 36px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(dateLine, W / 2, statsY + 48);
+
+        // Start/end times
+        if (statsObj.startTime || statsObj.endTime) {
+            ctx.fillStyle = '#aaaaaa';
+            ctx.font = '24px sans-serif';
+            var timeLine = '';
+            if (statsObj.startTime) timeLine += statsObj.startTime;
+            if (statsObj.startTime && statsObj.endTime) timeLine += '  \u2192  ';
+            if (statsObj.endTime) timeLine += statsObj.endTime;
+            ctx.fillText(timeLine, W / 2, statsY + 82);
+        }
+
+        // Three stat columns: Distance | Duration | Avg Speed
+        var colW = W / 3;
+        var labelY = statsY + 130;
+        var valueY = statsY + 170;
+        var labels = ['Distance', 'Duration', 'Avg Speed'];
+        var values = [statsObj.distance || '--', statsObj.duration || '--', statsObj.speed || '--'];
+
+        ctx.textAlign = 'center';
+        for (var c = 0; c < 3; c++) {
+            var cx = colW * c + colW / 2;
+            ctx.fillStyle = '#999999';
+            ctx.font = '22px sans-serif';
+            ctx.fillText(labels[c], cx, labelY);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 40px sans-serif';
+            ctx.fillText(values[c], cx, valueY);
+        }
+
+        // Activity legend with per-activity stats (one row per activity)
+        if (statsObj.legend && statsObj.legend.length > 0) {
+            var legendY = statsY + 230;
+            var rowHeight = 36;
+
+            for (var l = 0; l < statsObj.legend.length; l++) {
+                var item = statsObj.legend[l];
+                var rowY = legendY + l * rowHeight;
+
+                // Colored dot
+                ctx.beginPath();
+                ctx.arc(marginX + 8, rowY - 6, 8, 0, Math.PI * 2);
+                ctx.fillStyle = item.color;
+                ctx.fill();
+
+                // Activity name
+                ctx.fillStyle = '#cccccc';
+                ctx.font = 'bold 24px sans-serif';
+                ctx.textAlign = 'left';
+                var nameText = item.name;
+                if (item.rides && item.rides > 1) {
+                    nameText += ' (' + item.rides + ' rides)';
+                }
+                ctx.fillText(nameText, marginX + 24, rowY);
+
+                // Per-activity stats on the right
+                if (item.distance || item.avgSpeed) {
+                    ctx.fillStyle = '#999999';
+                    ctx.font = '22px sans-serif';
+                    ctx.textAlign = 'right';
+                    var statParts = [];
+                    if (item.distance) statParts.push(item.distance);
+                    if (item.avgSpeed) statParts.push(item.avgSpeed);
+                    ctx.fillText(statParts.join('  \u2022  '), W - marginX, rowY);
+                }
+            }
+        }
+
+        // Watermark
+        ctx.fillStyle = '#555555';
+        ctx.font = '18px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('iPhone Tracker', W / 2, H - 20);
+
+        // Download
+        canvas.toBlob(function(blob) {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+        }, 'image/png');
+    }
+
+    if (total === 0) { drawCanvas(); return; }
+
+    for (var tx = txMin; tx <= txMax; tx++) {
+        for (var ty = tyMin; ty <= tyMax; ty++) {
+            var s = subs[(tx + ty) % 3];
+            var img = new Image();
+            img.crossOrigin = 'anonymous';
+            tileImages.push({ tx: tx, ty: ty, img: img });
+            img.onload = img.onerror = function() {
+                loaded++;
+                if (loaded >= total) drawCanvas();
+            };
+            img.src = 'https://' + s + '.basemaps.cartocdn.com/rastertiles/voyager/' + zoom + '/' + tx + '/' + ty + '.png';
+        }
+    }
+}
+
+function saveTrackImage() {
+    if (activeLayers.size === 0) {
+        alert('No active layers to save.');
+        return;
+    }
+
+    var tracks = getLayerTrackData();
+    if (tracks.length === 0) {
+        alert('No track data to save.');
+        return;
+    }
+
+    var distance = document.getElementById('stat-distance').textContent;
+    var duration = document.getElementById('stat-duration').textContent;
+    var speed = document.getElementById('stat-speed').textContent;
+
+    var startDate = document.getElementById('start-date').value;
+    var endDate = document.getElementById('end-date').value;
+    var dateStr = startDate;
+    if (endDate && endDate !== startDate) {
+        dateStr = startDate + ' to ' + endDate;
+    }
+
+    // Build legend from active layers with per-activity stats
+    var legend = [];
+    var typeNames = { car: 'Car', bike: 'Bike', other: 'Walking', all: 'All' };
+    var typeColors = { car: '#FF4444', bike: '#FFD700', other: '#4444FF', all: '#FFA500' };
+    activeLayers.forEach(function(type) {
+        var entry = { name: typeNames[type] || type, color: typeColors[type] || '#ffffff' };
+        var ls = layerStats[type];
+        if (ls) {
+            entry.distance = ls.distance.toFixed(1) + ' km';
+            var spd = ls.duration > 0 ? (ls.distance / ls.duration * 3600) : 0;
+            entry.avgSpeed = spd > 0 ? (type === 'other' ? spd.toFixed(1) : spd.toFixed(0)) + ' km/h' : '';
+            entry.rides = ls.rides;
+        }
+        legend.push(entry);
+    });
+
+    // Extract start/end times and ride count from track points
+    var minTst = Infinity, maxTst = -Infinity;
+    for (var t = 0; t < tracks.length; t++) {
+        var pts = tracks[t].points;
+        for (var i = 0; i < pts.length; i++) {
+            if (pts[i].tst && pts[i].tst < minTst) minTst = pts[i].tst;
+            if (pts[i].tst && pts[i].tst > maxTst) maxTst = pts[i].tst;
+        }
+    }
+    var startTime = minTst < Infinity ? new Date(minTst * 1000).toLocaleTimeString() : '';
+    var endTime = maxTst > -Infinity ? new Date(maxTst * 1000).toLocaleTimeString() : '';
+
+    var filename = 'track_' + startDate + '.png';
+
+    generateTrackImage(tracks, {
+        date: dateStr,
+        distance: distance,
+        duration: duration,
+        speed: speed,
+        legend: legend,
+        rides: tracks.length,
+        startTime: startTime,
+        endTime: endTime
+    }, filename);
+}
+
+function saveLiveTrackImage() {
+    var tracks = getLayerTrackData();
+    if (tracks.length === 0) {
+        alert('No track data to save.');
+        return;
+    }
+
+    var distance = document.getElementById('live-stat-distance').textContent;
+    var duration = document.getElementById('live-stat-duration').textContent;
+    var speed = document.getElementById('live-stat-speed').textContent;
+
+    var now = new Date();
+    var dateStr = now.getFullYear() + '-' +
+        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getDate()).padStart(2, '0');
+
+    // Build legend from live rides data with per-activity stats
+    var legend = [];
+    var typeNames = { car: 'Car', bike: 'Bike', other: 'Walking' };
+    var typeColors = { car: '#FF4444', bike: '#FFD700', other: '#4444FF' };
+    ['car', 'bike', 'other'].forEach(function(type) {
+        if (liveRidesData[type] && liveRidesData[type].length > 0) {
+            var entry = { name: typeNames[type], color: typeColors[type] };
+            var ls = layerStats[type];
+            if (ls) {
+                entry.distance = ls.distance.toFixed(1) + ' km';
+                var spd = ls.duration > 0 ? (ls.distance / ls.duration * 3600) : 0;
+            entry.avgSpeed = spd > 0 ? (type === 'other' ? spd.toFixed(1) : spd.toFixed(0)) + ' km/h' : '';
+                entry.rides = ls.rides;
+            }
+            legend.push(entry);
+        }
+    });
+    if (legend.length === 0) {
+        legend.push({ name: 'Live', color: '#FF00FF' });
+    }
+
+    // Extract start/end times and ride count from track points
+    var minTst = Infinity, maxTst = -Infinity;
+    for (var t = 0; t < tracks.length; t++) {
+        var pts = tracks[t].points;
+        for (var i = 0; i < pts.length; i++) {
+            if (pts[i].tst && pts[i].tst < minTst) minTst = pts[i].tst;
+            if (pts[i].tst && pts[i].tst > maxTst) maxTst = pts[i].tst;
+        }
+    }
+    var startTime = minTst < Infinity ? new Date(minTst * 1000).toLocaleTimeString() : '';
+    var endTime = maxTst > -Infinity ? new Date(maxTst * 1000).toLocaleTimeString() : '';
+
+    var filename = 'live_track_' + dateStr + '.png';
+
+    generateTrackImage(tracks, {
+        date: dateStr,
+        distance: distance,
+        duration: duration,
+        speed: speed,
+        legend: legend,
+        rides: tracks.length,
+        startTime: startTime,
+        endTime: endTime
+    }, filename);
+}
+
 function updateTrackingInfo() {
     var icons = { car: 'Car', bike: 'Bike', other: 'Other', all: 'All' };
     var layerText = Array.from(activeLayers).map(function(type) {
@@ -672,6 +1078,7 @@ function showStartLiveButton() {
     document.getElementById('live-start-btn').textContent = 'Start Live Mode';
     document.getElementById('live-reset-btn').style.display = 'none';
     document.getElementById('live-save-btn').style.display = 'none';
+    document.getElementById('live-save-image-btn').style.display = 'none';
     var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) awakeBtn.style.display = 'none';
     document.getElementById('live-save-status').style.display = 'none';
@@ -730,6 +1137,7 @@ function joinLiveSession() {
     startBtn.style.display = 'none';
     document.getElementById('live-reset-btn').style.display = 'block';
     document.getElementById('live-save-btn').style.display = 'block';
+    document.getElementById('live-save-image-btn').style.display = 'block';
     var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) {
         awakeBtn.style.display = 'block';
@@ -822,6 +1230,7 @@ function resumeLiveSession() {
         startBtn.style.display = 'none';
         document.getElementById('live-reset-btn').style.display = 'block';
         document.getElementById('live-save-btn').style.display = 'block';
+        document.getElementById('live-save-image-btn').style.display = 'block';
         var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) {
         awakeBtn.style.display = 'block';
@@ -1010,6 +1419,7 @@ function startLiveMode() {
         startBtn.style.display = 'none';
         document.getElementById('live-reset-btn').style.display = 'block';
         document.getElementById('live-save-btn').style.display = 'block';
+        document.getElementById('live-save-image-btn').style.display = 'block';
         var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) {
         awakeBtn.style.display = 'block';
