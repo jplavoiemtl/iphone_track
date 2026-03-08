@@ -667,22 +667,26 @@ function generateTrackImage(tracks, statsObj, filename) {
         var ctx = canvas.getContext('2d');
 
         // Dark background
-        ctx.fillStyle = '#1a1a2e';
+        ctx.fillStyle = '#2a2a3e';
         ctx.fillRect(0, 0, W, H);
 
-        // Draw map tiles (clipped to drawing area) at reduced opacity for dark feel
+        // Draw map tiles then darken with color-burn for high contrast
         ctx.save();
         ctx.beginPath();
         ctx.rect(drawX, drawY, drawW, drawH);
         ctx.clip();
-        ctx.globalAlpha = 0.45;
+        // Draw tiles at full opacity
         for (var i = 0; i < tileImages.length; i++) {
             var ti = tileImages[i];
             if (ti.img.naturalWidth > 0) {
                 ctx.drawImage(ti.img, offX + ti.tx * 256, offY + ti.ty * 256, 256, 256);
             }
         }
-        ctx.globalAlpha = 1.0;
+        // Color-burn darkens mid-tones/highlights while preserving shadows and contrast
+        ctx.globalCompositeOperation = 'color-burn';
+        ctx.fillStyle = 'rgba(60, 60, 80, 1.0)';
+        ctx.fillRect(drawX, drawY, drawW, drawH);
+        ctx.globalCompositeOperation = 'source-over';
         ctx.restore();
 
         // Draw tracks (clipped to drawing area)
@@ -809,13 +813,14 @@ function generateTrackImage(tracks, statsObj, filename) {
                 ctx.fillText(nameText, marginX + 24, rowY);
 
                 // Per-activity stats on the right
-                if (item.distance || item.avgSpeed) {
+                if (item.distance || item.avgSpeed || item.duration) {
                     ctx.fillStyle = '#999999';
                     ctx.font = '22px sans-serif';
                     ctx.textAlign = 'right';
                     var statParts = [];
                     if (item.distance) statParts.push(item.distance);
                     if (item.avgSpeed) statParts.push(item.avgSpeed);
+                    if (item.duration) statParts.push(item.duration);
                     ctx.fillText(statParts.join('  \u2022  '), W - marginX, rowY);
                 }
             }
@@ -851,7 +856,7 @@ function generateTrackImage(tracks, statsObj, filename) {
                 loaded++;
                 if (loaded >= total) drawCanvas();
             };
-            img.src = 'https://' + s + '.basemaps.cartocdn.com/rastertiles/voyager/' + zoom + '/' + tx + '/' + ty + '.png';
+            img.src = 'https://' + s + '.basemaps.cartocdn.com/rastertiles/voyager/' + zoom + '/' + tx + '/' + ty + '@2x.png';
         }
     }
 }
@@ -890,6 +895,8 @@ function saveTrackImage() {
             entry.distance = ls.distance.toFixed(1) + ' km';
             var spd = ls.duration > 0 ? (ls.distance / ls.duration * 3600) : 0;
             entry.avgSpeed = spd > 0 ? (type === 'other' ? spd.toFixed(1) : spd.toFixed(0)) + ' km/h' : '';
+            var durMins = Math.floor(ls.duration / 60);
+            entry.duration = durMins >= 60 ? Math.floor(durMins / 60) + 'h ' + (durMins % 60) + 'm' : durMins + 'm';
             entry.rides = ls.rides;
         }
         legend.push(entry);
@@ -948,7 +955,9 @@ function saveLiveTrackImage() {
             if (ls) {
                 entry.distance = ls.distance.toFixed(1) + ' km';
                 var spd = ls.duration > 0 ? (ls.distance / ls.duration * 3600) : 0;
-            entry.avgSpeed = spd > 0 ? (type === 'other' ? spd.toFixed(1) : spd.toFixed(0)) + ' km/h' : '';
+                entry.avgSpeed = spd > 0 ? (type === 'other' ? spd.toFixed(1) : spd.toFixed(0)) + ' km/h' : '';
+                var durMins = Math.floor(ls.duration / 60);
+                entry.duration = durMins >= 60 ? Math.floor(durMins / 60) + 'h ' + (durMins % 60) + 'm' : durMins + 'm';
                 entry.rides = ls.rides;
             }
             legend.push(entry);
