@@ -671,7 +671,7 @@ function generateTrackImage(tracks, statsObj, filename) {
         // Black background for map area, dark blue-gray for stats area
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = '#2a2a3e';
+        ctx.fillStyle = '#2e3a5a';
         ctx.fillRect(0, 1440, W, H - 1440);
 
         // Draw map tiles then darken with color-burn for high contrast
@@ -746,10 +746,10 @@ function generateTrackImage(tracks, statsObj, filename) {
         }
         ctx.restore();
 
-        // Stats overlay background
+        // Stats overlay background — lighter navy blue
         var statsY = 1440;
         var statsH = H - statsY;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillStyle = '#2e3a5a';
         ctx.fillRect(0, statsY, W, statsH);
 
         // Date line with rides count
@@ -758,25 +758,25 @@ function generateTrackImage(tracks, statsObj, filename) {
             dateLine += '  \u2022  ' + statsObj.rides + (statsObj.rides === 1 ? ' ride' : ' rides');
         }
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 36px sans-serif';
+        ctx.font = 'bold 44px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(dateLine, W / 2, statsY + 48);
+        ctx.fillText(dateLine, W / 2, statsY + 52);
 
         // Start/end times
         if (statsObj.startTime || statsObj.endTime) {
             ctx.fillStyle = '#aaaaaa';
-            ctx.font = '24px sans-serif';
+            ctx.font = '30px sans-serif';
             var timeLine = '';
             if (statsObj.startTime) timeLine += statsObj.startTime;
             if (statsObj.startTime && statsObj.endTime) timeLine += '  \u2192  ';
             if (statsObj.endTime) timeLine += statsObj.endTime;
-            ctx.fillText(timeLine, W / 2, statsY + 82);
+            ctx.fillText(timeLine, W / 2, statsY + 92);
         }
 
         // Three stat columns: Distance | Duration | Avg Speed
         var colW = W / 3;
-        var labelY = statsY + 130;
-        var valueY = statsY + 170;
+        var labelY = statsY + 145;
+        var valueY = statsY + 190;
         var labels = ['Distance', 'Duration', 'Avg Speed'];
         var values = [statsObj.distance || '--', statsObj.duration || '--', statsObj.speed || '--'];
 
@@ -784,17 +784,17 @@ function generateTrackImage(tracks, statsObj, filename) {
         for (var c = 0; c < 3; c++) {
             var cx = colW * c + colW / 2;
             ctx.fillStyle = '#999999';
-            ctx.font = '22px sans-serif';
+            ctx.font = '28px sans-serif';
             ctx.fillText(labels[c], cx, labelY);
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 40px sans-serif';
+            ctx.font = 'bold 48px sans-serif';
             ctx.fillText(values[c], cx, valueY);
         }
 
         // Activity legend with per-activity stats (one row per activity)
         if (statsObj.legend && statsObj.legend.length > 0) {
-            var legendY = statsY + 230;
-            var rowHeight = 36;
+            var legendY = statsY + 260;
+            var rowHeight = 44;
 
             for (var l = 0; l < statsObj.legend.length; l++) {
                 var item = statsObj.legend[l];
@@ -802,39 +802,39 @@ function generateTrackImage(tracks, statsObj, filename) {
 
                 // Colored dot
                 ctx.beginPath();
-                ctx.arc(marginX + 8, rowY - 6, 8, 0, Math.PI * 2);
+                ctx.arc(marginX + 10, rowY - 7, 10, 0, Math.PI * 2);
                 ctx.fillStyle = item.color;
                 ctx.fill();
 
                 // Activity name
                 ctx.fillStyle = '#cccccc';
-                ctx.font = 'bold 24px sans-serif';
+                ctx.font = 'bold 30px sans-serif';
                 ctx.textAlign = 'left';
                 var nameText = item.name;
                 if (item.rides && item.rides > 1) {
                     nameText += ' (' + item.rides + ' rides)';
                 }
-                ctx.fillText(nameText, marginX + 24, rowY);
+                ctx.fillText(nameText, marginX + 28, rowY);
 
-                // Per-activity stats on the right
+                // Per-activity stats on the right: distance, duration, avgSpeed
                 if (item.distance || item.avgSpeed || item.duration) {
                     ctx.fillStyle = '#999999';
-                    ctx.font = '22px sans-serif';
+                    ctx.font = '28px sans-serif';
                     ctx.textAlign = 'right';
                     var statParts = [];
                     if (item.distance) statParts.push(item.distance);
-                    if (item.avgSpeed) statParts.push(item.avgSpeed);
                     if (item.duration) statParts.push(item.duration);
+                    if (item.avgSpeed) statParts.push(item.avgSpeed);
                     ctx.fillText(statParts.join('  \u2022  '), W - marginX, rowY);
                 }
             }
         }
 
         // Watermark
-        ctx.fillStyle = '#555555';
-        ctx.font = '18px sans-serif';
+        ctx.fillStyle = '#6a7a9a';
+        ctx.font = '22px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('iPhone Tracker', W / 2, H - 20);
+        ctx.fillText('iPhone Tracker', W / 2, H - 24);
 
         // Download
         canvas.toBlob(function(blob) {
@@ -923,8 +923,9 @@ function saveTrackImage() {
             if (pts[i].tst && pts[i].tst > maxTst) maxTst = pts[i].tst;
         }
     }
-    var startTime = minTst < Infinity ? new Date(minTst * 1000).toLocaleTimeString() : '';
-    var endTime = maxTst > -Infinity ? new Date(maxTst * 1000).toLocaleTimeString() : '';
+    var tzOpts = activityTimezone ? { timeZone: activityTimezone } : {};
+    var startTime = minTst < Infinity ? new Date(minTst * 1000).toLocaleTimeString('default', tzOpts) : '';
+    var endTime = maxTst > -Infinity ? new Date(maxTst * 1000).toLocaleTimeString('default', tzOpts) : '';
 
     var filename = 'track_' + startDate + '.jpg';
 
@@ -996,8 +997,9 @@ function saveLiveTrackImage() {
             if (pts[i].tst && pts[i].tst > maxTst) maxTst = pts[i].tst;
         }
     }
-    var startTime = minTst < Infinity ? new Date(minTst * 1000).toLocaleTimeString() : '';
-    var endTime = maxTst > -Infinity ? new Date(maxTst * 1000).toLocaleTimeString() : '';
+    var tzOpts = activityTimezone ? { timeZone: activityTimezone } : {};
+    var startTime = minTst < Infinity ? new Date(minTst * 1000).toLocaleTimeString('default', tzOpts) : '';
+    var endTime = maxTst > -Infinity ? new Date(maxTst * 1000).toLocaleTimeString('default', tzOpts) : '';
 
     var filename = 'live_track_' + dateStr + '.jpg';
 
