@@ -582,6 +582,116 @@ function saveLiveMap() {
 // Track Art Image Generation
 // =============================================================================
 
+function buildExifGpsSegment(lat, lng) {
+    var latRef = lat >= 0 ? 0x4E : 0x53;  // 'N' or 'S'
+    var lngRef = lng >= 0 ? 0x45 : 0x57;  // 'E' or 'W'
+
+    function toDms(decimal) {
+        var abs = Math.abs(decimal);
+        var deg = Math.floor(abs);
+        var minFloat = (abs - deg) * 60;
+        var min = Math.floor(minFloat);
+        var sec = Math.round((minFloat - min) * 6000);
+        return [deg, 1, min, 1, sec, 100];
+    }
+
+    var latDms = toDms(lat);
+    var lngDms = toDms(lng);
+
+    // EXIF APP1 segment: marker(2) + length(2) + "Exif\0\0"(6) +
+    // TIFF header(8) + IFD0(18) + GPS IFD(54) + data(48) = 138 bytes
+    var buf = new ArrayBuffer(138);
+    var view = new DataView(buf);
+    var off = 0;
+
+    // APP1 marker
+    view.setUint8(off++, 0xFF);
+    view.setUint8(off++, 0xE1);
+    view.setUint16(off, 136, false); off += 2;  // length (big-endian per JPEG spec)
+    // "Exif\0\0"
+    view.setUint8(off++, 0x45); view.setUint8(off++, 0x78);
+    view.setUint8(off++, 0x69); view.setUint8(off++, 0x66);
+    view.setUint8(off++, 0x00); view.setUint8(off++, 0x00);
+
+    var tiffStart = off;  // all TIFF offsets relative to here
+
+    // TIFF header (little-endian)
+    view.setUint8(off++, 0x49); view.setUint8(off++, 0x49);  // "II"
+    view.setUint16(off, 0x002A, true); off += 2;
+    view.setUint32(off, 8, true); off += 4;  // offset to IFD0
+
+    // IFD0: 1 entry (GPSInfoIFDPointer)
+    view.setUint16(off, 1, true); off += 2;
+    view.setUint16(off, 0x8825, true); off += 2;  // tag
+    view.setUint16(off, 4, true); off += 2;        // type LONG
+    view.setUint32(off, 1, true); off += 4;         // count
+    view.setUint32(off, 26, true); off += 4;        // GPS IFD at tiff+26
+    view.setUint32(off, 0, true); off += 4;         // next IFD = none
+
+    // GPS IFD: 4 entries, starts at tiff+26
+    view.setUint16(off, 4, true); off += 2;
+
+    // Data area starts at tiff+80 (26 + 2 + 48 + 4)
+    var dataOff = 80;
+
+    // GPSLatitudeRef (tag 1, ASCII, count 2, inline)
+    view.setUint16(off, 0x0001, true); off += 2;
+    view.setUint16(off, 2, true); off += 2;
+    view.setUint32(off, 2, true); off += 4;
+    view.setUint8(off, latRef); view.setUint8(off + 1, 0);
+    view.setUint8(off + 2, 0); view.setUint8(off + 3, 0);
+    off += 4;
+
+    // GPSLatitude (tag 2, RATIONAL, count 3, offset to data)
+    view.setUint16(off, 0x0002, true); off += 2;
+    view.setUint16(off, 5, true); off += 2;
+    view.setUint32(off, 3, true); off += 4;
+    view.setUint32(off, dataOff, true); off += 4;
+    var p = tiffStart + dataOff;
+    for (var i = 0; i < 6; i++) { view.setUint32(p, latDms[i], true); p += 4; }
+    dataOff += 24;
+
+    // GPSLongitudeRef (tag 3, ASCII, count 2, inline)
+    view.setUint16(off, 0x0003, true); off += 2;
+    view.setUint16(off, 2, true); off += 2;
+    view.setUint32(off, 2, true); off += 4;
+    view.setUint8(off, lngRef); view.setUint8(off + 1, 0);
+    view.setUint8(off + 2, 0); view.setUint8(off + 3, 0);
+    off += 4;
+
+    // GPSLongitude (tag 4, RATIONAL, count 3, offset to data)
+    view.setUint16(off, 0x0004, true); off += 2;
+    view.setUint16(off, 5, true); off += 2;
+    view.setUint32(off, 3, true); off += 4;
+    view.setUint32(off, dataOff, true); off += 4;
+    p = tiffStart + dataOff;
+    for (var i = 0; i < 6; i++) { view.setUint32(p, lngDms[i], true); p += 4; }
+
+    // Next IFD pointer for GPS IFD
+    view.setUint32(off, 0, true);
+
+    return new Uint8Array(buf);
+}
+
+function injectExifGps(blob, lat, lng, callback) {
+    var reader = new FileReader();
+    reader.onload = function() {
+        var jpeg = new Uint8Array(reader.result);
+        if (jpeg[0] !== 0xFF || jpeg[1] !== 0xD8) {
+            callback(blob);
+            return;
+        }
+        var exifSegment = buildExifGpsSegment(lat, lng);
+        var newBlob = new Blob(
+            [jpeg.slice(0, 2), exifSegment, jpeg.slice(2)],
+            { type: 'image/jpeg' }
+        );
+        callback(newBlob);
+    };
+    reader.onerror = function() { callback(blob); };
+    reader.readAsArrayBuffer(blob);
+}
+
 function generateTrackImage(tracks, statsObj, filename) {
     var totalPoints = 0;
     for (var t = 0; t < tracks.length; t++) {
@@ -880,13 +990,18 @@ function generateTrackImage(tracks, statsObj, filename) {
 
         // Download
         canvas.toBlob(function(blob) {
-            var a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(a.href);
+            // Inject GPS EXIF from last track point
+            var lastTrack = tracks[tracks.length - 1];
+            var lastPt = lastTrack.points[lastTrack.points.length - 1];
+            injectExifGps(blob, lastPt.lat, lastPt.lng, function(geoBlob) {
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(geoBlob);
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+            });
         }, 'image/jpeg', 0.75);
     }
 
