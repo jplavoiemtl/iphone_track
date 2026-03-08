@@ -1326,15 +1326,15 @@ function getLayerTrackData() {
                 var ll = livePolylinePath.getAt(i);
                 pts.push({ lat: ll.lat(), lng: ll.lng() });
             }
-            tracks.push({ points: pts, color: activityConfig['live'].color });
+            tracks.push({ points: pts, color: activityConfig['live'].color, type: 'live' });
         } else if (layer.ridesData) {
             layer.ridesData.forEach(function (ride) {
                 if (ride.points && ride.points.length >= 2) {
-                    tracks.push({ points: ride.points, color: ride.color });
+                    tracks.push({ points: ride.points, color: ride.color, type: type });
                 }
             });
         } else if (layer.basicPoints && layer.basicPoints.length >= 2) {
-            tracks.push({ points: layer.basicPoints, color: layer.basicColor });
+            tracks.push({ points: layer.basicPoints, color: layer.basicColor, type: type });
         }
     }
     return tracks;

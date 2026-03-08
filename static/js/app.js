@@ -877,6 +877,14 @@ function saveTrackImage() {
         return;
     }
 
+    // Unified colors per activity type for saved image
+    var imageColors = { car: '#FF4444', bike: '#FF8C00', other: '#FF00FF', all: '#FFA500', live: '#FF00FF' };
+    for (var t = 0; t < tracks.length; t++) {
+        if (tracks[t].type && imageColors[tracks[t].type]) {
+            tracks[t].color = imageColors[tracks[t].type];
+        }
+    }
+
     var distance = document.getElementById('stat-distance').textContent;
     var duration = document.getElementById('stat-duration').textContent;
     var speed = document.getElementById('stat-speed').textContent;
@@ -891,7 +899,7 @@ function saveTrackImage() {
     // Build legend from active layers with per-activity stats
     var legend = [];
     var typeNames = { car: 'Car', bike: 'Bike', other: 'Walking', all: 'All' };
-    var typeColors = { car: '#FF4444', bike: '#FFD700', other: '#4444FF', all: '#FFA500' };
+    var typeColors = { car: '#FF4444', bike: '#FF8C00', other: '#FF00FF', all: '#FFA500' };
     activeLayers.forEach(function(type) {
         var entry = { name: typeNames[type] || type, color: typeColors[type] || '#ffffff' };
         var ls = layerStats[type];
@@ -939,6 +947,14 @@ function saveLiveTrackImage() {
         return;
     }
 
+    // Unified colors per activity type for saved image
+    var imageColors = { car: '#FF4444', bike: '#FF8C00', other: '#FF00FF', all: '#FFA500', live: '#FF00FF' };
+    for (var t = 0; t < tracks.length; t++) {
+        if (tracks[t].type && imageColors[tracks[t].type]) {
+            tracks[t].color = imageColors[tracks[t].type];
+        }
+    }
+
     var distance = document.getElementById('live-stat-distance').textContent;
     var duration = document.getElementById('live-stat-duration').textContent;
     var speed = document.getElementById('live-stat-speed').textContent;
@@ -951,7 +967,7 @@ function saveLiveTrackImage() {
     // Build legend from live rides data with per-activity stats
     var legend = [];
     var typeNames = { car: 'Car', bike: 'Bike', other: 'Walking' };
-    var typeColors = { car: '#FF4444', bike: '#FFD700', other: '#4444FF' };
+    var typeColors = { car: '#FF4444', bike: '#FF8C00', other: '#FF00FF' };
     ['car', 'bike', 'other'].forEach(function(type) {
         if (liveRidesData[type] && liveRidesData[type].length > 0) {
             var entry = { name: typeNames[type], color: typeColors[type] };
