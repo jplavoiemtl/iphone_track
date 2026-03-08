@@ -744,6 +744,48 @@ function generateTrackImage(tracks, statsObj, filename) {
                 }
             }
         }
+
+        // Start/end markers on tracks (drawn after tracks so they sit on top)
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        // Start markers (green) — disabled to reduce clutter, uncomment to re-enable
+        /*
+        for (var t = 0; t < tracks.length; t++) {
+            var pts = tracks[t].points;
+            if (pts.length < 2) continue;
+            var sx = projectX(pts[0].lng), sy = projectY(pts[0].lat);
+            ctx.beginPath();
+            ctx.arc(sx, sy, 10, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#34A853';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+        }
+        */
+        // End markers (uses track color for each activity type)
+        for (var t = 0; t < tracks.length; t++) {
+            var pts = tracks[t].points;
+            if (pts.length < 2) continue;
+            var ex = projectX(pts[pts.length - 1].lng), ey = projectY(pts[pts.length - 1].lat);
+            ctx.beginPath();
+            ctx.arc(ex, ey, 10, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(ex, ey, 8, 0, Math.PI * 2);
+            ctx.fillStyle = tracks[t].color;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(ex, ey, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+        }
         ctx.restore();
 
         // Stats overlay background — lighter navy blue
