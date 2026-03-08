@@ -1001,6 +1001,13 @@ function saveLiveTrackImage() {
     var startTime = minTst < Infinity ? new Date(minTst * 1000).toLocaleTimeString('default', tzOpts) : '';
     var endTime = maxTst > -Infinity ? new Date(maxTst * 1000).toLocaleTimeString('default', tzOpts) : '';
 
+    // Count actual classified rides, not raw track segments
+    var rideCount = 0;
+    ['car', 'bike', 'other'].forEach(function(type) {
+        rideCount += (liveRidesData[type] || []).length;
+    });
+    if (rideCount === 0 && tracks.length > 0) rideCount = 1;
+
     var filename = 'live_track_' + dateStr + '.jpg';
 
     generateTrackImage(tracks, {
@@ -1009,7 +1016,7 @@ function saveLiveTrackImage() {
         duration: duration,
         speed: speed,
         legend: legend,
-        rides: tracks.length,
+        rides: rideCount,
         startTime: startTime,
         endTime: endTime
     }, filename);
