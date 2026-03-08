@@ -688,7 +688,7 @@ function generateTrackImage(tracks, statsObj, filename) {
         }
         // Color-burn darkens mid-tones/highlights while preserving shadows and contrast
         ctx.globalCompositeOperation = 'color-burn';
-        ctx.fillStyle = 'rgba(60, 60, 80, 1.0)';
+        ctx.fillStyle = 'rgba(100, 100, 120, 1.0)';
         ctx.fillRect(drawX, drawY, drawW, drawH);
         ctx.globalCompositeOperation = 'source-over';
         ctx.restore();
