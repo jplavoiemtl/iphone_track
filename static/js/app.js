@@ -593,10 +593,10 @@ function generateTrackImage(tracks, statsObj, filename) {
     }
 
     var W = 1080, H = 1920;
-    var marginX = 80, topPad = 120;
-    var drawW = W - marginX * 2;  // 920
-    var drawH = 1300;
-    var drawX = marginX, drawY = topPad;
+    var drawX = 0, drawY = 0;
+    var drawW = W;
+    var drawH = 1440;
+    var marginX = 80;
 
     // Compute lat/lng bounding box
     var minLat = Infinity, maxLat = -Infinity;
@@ -650,9 +650,11 @@ function generateTrackImage(tracks, statsObj, filename) {
     function projectX(lng) { return offX + lngToPx(lng); }
     function projectY(lat) { return offY + latToPx(lat); }
 
-    // Determine which tiles cover the drawing area
-    var txMin = Math.floor(wpxLeft / 256), txMax = Math.floor(wpxRight / 256);
-    var tyMin = Math.floor(wpxTop / 256), tyMax = Math.floor(wpxBottom / 256);
+    // Determine which tiles cover the full drawing area (not just bbox)
+    var wpxCanvasLeft = drawX - offX, wpxCanvasRight = drawX + drawW - offX;
+    var wpxCanvasTop = drawY - offY, wpxCanvasBottom = drawY + drawH - offY;
+    var txMin = Math.floor(wpxCanvasLeft / 256), txMax = Math.floor(wpxCanvasRight / 256);
+    var tyMin = Math.floor(wpxCanvasTop / 256), tyMax = Math.floor(wpxCanvasBottom / 256);
 
     // Load dark basemap tiles, then draw everything
     var tileImages = [];
@@ -666,9 +668,11 @@ function generateTrackImage(tracks, statsObj, filename) {
         canvas.height = H;
         var ctx = canvas.getContext('2d');
 
-        // Dark background
-        ctx.fillStyle = '#2a2a3e';
+        // Black background for map area, dark blue-gray for stats area
+        ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#2a2a3e';
+        ctx.fillRect(0, 1440, W, H - 1440);
 
         // Draw map tiles then darken with color-burn for high contrast
         ctx.save();
@@ -841,7 +845,7 @@ function generateTrackImage(tracks, statsObj, filename) {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(a.href);
-        }, 'image/png');
+        }, 'image/jpeg', 0.75);
     }
 
     if (total === 0) { drawCanvas(); return; }
@@ -914,7 +918,7 @@ function saveTrackImage() {
     var startTime = minTst < Infinity ? new Date(minTst * 1000).toLocaleTimeString() : '';
     var endTime = maxTst > -Infinity ? new Date(maxTst * 1000).toLocaleTimeString() : '';
 
-    var filename = 'track_' + startDate + '.png';
+    var filename = 'track_' + startDate + '.jpg';
 
     generateTrackImage(tracks, {
         date: dateStr,
@@ -979,7 +983,7 @@ function saveLiveTrackImage() {
     var startTime = minTst < Infinity ? new Date(minTst * 1000).toLocaleTimeString() : '';
     var endTime = maxTst > -Infinity ? new Date(maxTst * 1000).toLocaleTimeString() : '';
 
-    var filename = 'live_track_' + dateStr + '.png';
+    var filename = 'live_track_' + dateStr + '.jpg';
 
     generateTrackImage(tracks, {
         date: dateStr,
