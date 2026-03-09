@@ -910,25 +910,25 @@ function generateTrackImage(tracks, statsObj, filename) {
             dateLine += '  \u2022  ' + statsObj.rides + (statsObj.rides === 1 ? ' ride' : ' rides');
         }
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 44px sans-serif';
+        ctx.font = 'bold 52px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(dateLine, W / 2, statsY + 52);
+        ctx.fillText(dateLine, W / 2, statsY + 56);
 
         // Start/end times
         if (statsObj.startTime || statsObj.endTime) {
             ctx.fillStyle = '#aaaaaa';
-            ctx.font = '30px sans-serif';
+            ctx.font = '34px sans-serif';
             var timeLine = '';
             if (statsObj.startTime) timeLine += statsObj.startTime;
             if (statsObj.startTime && statsObj.endTime) timeLine += '  \u2192  ';
             if (statsObj.endTime) timeLine += statsObj.endTime;
-            ctx.fillText(timeLine, W / 2, statsY + 92);
+            ctx.fillText(timeLine, W / 2, statsY + 100);
         }
 
         // Three stat columns: Distance | Duration | Avg Speed
         var colW = W / 3;
-        var labelY = statsY + 145;
-        var valueY = statsY + 190;
+        var labelY = statsY + 155;
+        var valueY = statsY + 205;
         var labels = ['Distance', 'Duration', 'Avg Speed'];
         var values = [statsObj.distance || '--', statsObj.duration || '--', statsObj.speed || '--'];
 
@@ -936,17 +936,17 @@ function generateTrackImage(tracks, statsObj, filename) {
         for (var c = 0; c < 3; c++) {
             var cx = colW * c + colW / 2;
             ctx.fillStyle = '#999999';
-            ctx.font = '28px sans-serif';
+            ctx.font = '32px sans-serif';
             ctx.fillText(labels[c], cx, labelY);
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 48px sans-serif';
+            ctx.font = 'bold 54px sans-serif';
             ctx.fillText(values[c], cx, valueY);
         }
 
         // Activity legend with per-activity stats (one row per activity)
         if (statsObj.legend && statsObj.legend.length > 0) {
-            var legendY = statsY + 260;
-            var rowHeight = 44;
+            var legendY = statsY + 280;
+            var rowHeight = 50;
 
             for (var l = 0; l < statsObj.legend.length; l++) {
                 var item = statsObj.legend[l];
@@ -954,24 +954,24 @@ function generateTrackImage(tracks, statsObj, filename) {
 
                 // Colored dot
                 ctx.beginPath();
-                ctx.arc(marginX + 10, rowY - 7, 10, 0, Math.PI * 2);
+                ctx.arc(marginX + 12, rowY - 8, 12, 0, Math.PI * 2);
                 ctx.fillStyle = item.color;
                 ctx.fill();
 
                 // Activity name
                 ctx.fillStyle = '#cccccc';
-                ctx.font = 'bold 30px sans-serif';
+                ctx.font = 'bold 34px sans-serif';
                 ctx.textAlign = 'left';
                 var nameText = item.name;
                 if (item.rides && item.rides > 1) {
                     nameText += ' (' + item.rides + ' rides)';
                 }
-                ctx.fillText(nameText, marginX + 28, rowY);
+                ctx.fillText(nameText, marginX + 32, rowY);
 
                 // Per-activity stats on the right: distance, duration, avgSpeed
                 if (item.distance || item.avgSpeed || item.duration) {
                     ctx.fillStyle = '#999999';
-                    ctx.font = '28px sans-serif';
+                    ctx.font = '32px sans-serif';
                     ctx.textAlign = 'right';
                     var statParts = [];
                     if (item.distance) statParts.push(item.distance);
@@ -984,9 +984,9 @@ function generateTrackImage(tracks, statsObj, filename) {
 
         // Watermark
         ctx.fillStyle = '#6a7a9a';
-        ctx.font = '22px sans-serif';
+        ctx.font = '26px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('iPhone Tracker', W / 2, H - 24);
+        ctx.fillText('iPhone Tracker', W / 2, H - 26);
 
         // Download
         canvas.toBlob(function(blob) {
@@ -1035,7 +1035,7 @@ function saveTrackImage() {
     }
 
     // Unified colors per activity type for saved image
-    var imageColors = { car: '#FF4444', bike: '#FF8C00', other: '#FF00FF', all: '#FFA500', live: '#FF00FF' };
+    var imageColors = { car: '#FF4444', bike: '#1E3A6E', other: '#FF00FF', all: '#FFA500', live: '#FF00FF' };
     for (var t = 0; t < tracks.length; t++) {
         if (tracks[t].type && imageColors[tracks[t].type]) {
             tracks[t].color = imageColors[tracks[t].type];
@@ -1056,7 +1056,7 @@ function saveTrackImage() {
     // Build legend from active layers with per-activity stats
     var legend = [];
     var typeNames = { car: 'Car', bike: 'Bike', other: 'Walking', all: 'All' };
-    var typeColors = { car: '#FF4444', bike: '#FF8C00', other: '#FF00FF', all: '#FFA500' };
+    var typeColors = { car: '#FF4444', bike: '#1E3A6E', other: '#FF00FF', all: '#FFA500' };
     activeLayers.forEach(function(type) {
         var entry = { name: typeNames[type] || type, color: typeColors[type] || '#ffffff' };
         var ls = layerStats[type];
@@ -1106,7 +1106,7 @@ function saveLiveTrackImage() {
     }
 
     // Unified colors per activity type for saved image
-    var imageColors = { car: '#FF4444', bike: '#FF8C00', other: '#FF00FF', all: '#FFA500', live: '#FF00FF' };
+    var imageColors = { car: '#FF4444', bike: '#1E3A6E', other: '#FF00FF', all: '#FFA500', live: '#FF00FF' };
     for (var t = 0; t < tracks.length; t++) {
         if (tracks[t].type && imageColors[tracks[t].type]) {
             tracks[t].color = imageColors[tracks[t].type];
@@ -1125,7 +1125,7 @@ function saveLiveTrackImage() {
     // Build legend from live rides data with per-activity stats
     var legend = [];
     var typeNames = { car: 'Car', bike: 'Bike', other: 'Walking' };
-    var typeColors = { car: '#FF4444', bike: '#FF8C00', other: '#FF00FF' };
+    var typeColors = { car: '#FF4444', bike: '#1E3A6E', other: '#FF00FF' };
     ['car', 'bike', 'other'].forEach(function(type) {
         if (liveRidesData[type] && liveRidesData[type].length > 0) {
             var entry = { name: typeNames[type], color: typeColors[type] };
