@@ -1710,6 +1710,17 @@ function enableKeepAwake() {
                 if (wakeLockActive) enableKeepAwake();
             }, 3000);
         }
+        // If failed without wakeLockActive (no user gesture on page load),
+        // wait for first tap then retry
+        if (!wakeLockActive && !window._wakeLockGestureListener) {
+            window._wakeLockGestureListener = function() {
+                document.removeEventListener('click', window._wakeLockGestureListener);
+                window._wakeLockGestureListener = null;
+                if (!wakeLockActive) enableKeepAwake();
+            };
+            document.addEventListener('click', window._wakeLockGestureListener);
+            console.log('[WakeLock] Waiting for user gesture to acquire lock');
+        }
     });
 }
 
