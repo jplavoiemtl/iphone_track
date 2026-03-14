@@ -18,13 +18,13 @@
 
             <!-- Mode Toggle -->
             <div class="mode-toggle">
-                <button id="mode-datetime" class="mode-btn active">Date/Time</button>
-                <button id="mode-live" class="mode-btn">Live</button>
+                <button id="mode-datetime" class="mode-btn">Date/Time</button>
+                <button id="mode-live" class="mode-btn active">Live</button>
             </div>
         </div>
 
-        <!-- Live Mode Panel (hidden by default) -->
-        <div id="live-panel" class="panel" style="display: none;">
+        <!-- Live Mode Panel (shown by default) -->
+        <div id="live-panel" class="panel">
             <div class="live-status">
                 <span id="live-indicator" class="indicator-dot"></span>
                 <span id="live-status-text">Stopped</span>
@@ -86,8 +86,8 @@
             </div>
         </div>
 
-        <!-- Date & Time Selection (datetime mode) -->
-        <div id="datetime-panel">
+        <!-- Date & Time Selection (datetime mode, hidden by default) -->
+        <div id="datetime-panel" style="display: none;">
             <div class="panel">
                 <h2>Date & Time Selection</h2>
                 <div class="form-row">

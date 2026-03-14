@@ -3,7 +3,7 @@ var activeLayers = new Set();
 var activityTimezone = null;  // IANA timezone from backend (e.g., 'Europe/Paris')
 
 // Live mode state
-var currentMode = 'datetime';  // 'datetime' | 'live'
+var currentMode = 'live';  // 'datetime' | 'live'
 var pollTimer = null;          // setTimeout handle for next scheduled poll
 var liveData = null;
 var GPS_INTERVAL_S = 65;       // Expected iPhone send cadence (observed ~65s in practice)
@@ -89,6 +89,11 @@ document.addEventListener('DOMContentLoaded', function() {
         modeLiveBtn.addEventListener('click', function() {
             switchToLiveMode();
         });
+    }
+
+    // If starting in live mode, check for existing session to offer resume
+    if (currentMode === 'live') {
+        checkLiveStatus();
     }
 
     // Live mode button handlers
