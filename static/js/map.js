@@ -36,7 +36,7 @@ var DARK_MAP_STYLES = [
 function initMap() {
     map = new google.maps.Map(document.getElementById('map'), {
         center: { lat: 45.5017, lng: -73.5673 },
-        zoom: 15,
+        zoom: 16,
         mapTypeId: 'roadmap'
     });
     _initDarkModePreference();   // read pref + set darkModeEnabled BEFORE controls are created
