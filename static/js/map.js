@@ -36,7 +36,7 @@ var DARK_MAP_STYLES = [
 function initMap() {
     map = new google.maps.Map(document.getElementById('map'), {
         center: { lat: 45.5017, lng: -73.5673 },
-        zoom: 14,
+        zoom: 15,
         mapTypeId: 'roadmap'
     });
     _initDarkModePreference();   // read pref + set darkModeEnabled BEFORE controls are created
@@ -888,37 +888,37 @@ var layerPanelCollapsed = false;
 
 function createLayerControl() {
     // Compute initial colors from darkModeEnabled (set before this is called)
-    var panelBg     = darkModeEnabled ? 'rgba(22, 33, 62, 0.95)' : 'rgba(255,255,255,0.95)';
-    var panelBorder = darkModeEnabled ? '2px solid #0f3460'       : '2px solid #666';
-    var titleColor  = darkModeEnabled ? '#e0e0e0' : '#333';
-    var arrowColor  = darkModeEnabled ? '#a0a0b8' : '#666';
-    var hBorder     = darkModeEnabled ? '1px solid #0f3460' : '1px solid #ddd';
+    var panelBg = darkModeEnabled ? 'rgba(22, 33, 62, 0.95)' : 'rgba(255,255,255,0.95)';
+    var panelBorder = darkModeEnabled ? '2px solid #0f3460' : '2px solid #666';
+    var titleColor = darkModeEnabled ? '#e0e0e0' : '#333';
+    var arrowColor = darkModeEnabled ? '#a0a0b8' : '#666';
+    var hBorder = darkModeEnabled ? '1px solid #0f3460' : '1px solid #ddd';
     var hLabelColor = darkModeEnabled ? '#e0e0e0' : '#333';
-    var hTimeColor  = darkModeEnabled ? '#a0a0b8' : '#666';
+    var hTimeColor = darkModeEnabled ? '#a0a0b8' : '#666';
     var hStatsColor = darkModeEnabled ? '#b0b0c8' : '#555';
     var controlDiv = document.createElement('div');
     controlDiv.id = 'mapLayerControl';
     controlDiv.innerHTML =
         '<div id="layerPanelOuter" style="background:' + panelBg + ';border:' + panelBorder + ';border-radius:8px;margin:8px 4px;padding:8px 10px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);max-width:calc(100vw - 70px);">' +
         '<div id="layerPanelHeader" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:2px 0;" onclick="toggleLayerPanel()">' +
-            '<span style="font-weight:bold;color:' + titleColor + ';font-size:13px;">Active Layers</span>' +
-            '<span id="layerPanelArrow" style="font-size:10px;color:' + arrowColor + ';margin-left:8px;">&#9660;</span>' +
+        '<span style="font-weight:bold;color:' + titleColor + ';font-size:13px;">Active Layers</span>' +
+        '<span id="layerPanelArrow" style="font-size:10px;color:' + arrowColor + ';margin-left:8px;">&#9660;</span>' +
         '</div>' +
         '<div id="layerPanelBody">' +
-            '<div id="mapLayerList" style="margin-top:6px;"></div>' +
-            '<div id="history-panel" style="display:none;border-top:' + hBorder + ';margin-top:6px;padding-top:6px;">' +
-                '<div id="history-label" class="history-label live" style="font-weight:bold;color:' + hLabelColor + ';margin-bottom:4px;"></div>' +
-                '<div id="history-time" style="color:' + hTimeColor + ';margin-bottom:3px;"></div>' +
-                '<div style="color:' + hStatsColor + ';font-size:11px;margin-bottom:6px;">' +
-                    '<span id="history-distance">0 km</span> | ' +
-                    '<span id="history-duration">0m</span> | ' +
-                    '<span id="history-speed">0 km/h</span>' +
-                '</div>' +
-                '<div style="display:flex;align-items:center;gap:6px;">' +
-                    '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:2px 6px;border:none;border-radius:3px;background:#4285F4;color:white;cursor:pointer;font-size:9px;font-weight:bold;flex-shrink:0;">LIVE</button>' +
-                '</div>' +
-                '<input type="range" id="history-slider" min="0" max="0" value="0" oninput="onHistorySliderInput(this)" onchange="onHistorySliderChange()" style="width:100%;margin-top:4px;">' +
-            '</div>' +
+        '<div id="mapLayerList" style="margin-top:6px;"></div>' +
+        '<div id="history-panel" style="display:none;border-top:' + hBorder + ';margin-top:6px;padding-top:6px;">' +
+        '<div id="history-label" class="history-label live" style="font-weight:bold;color:' + hLabelColor + ';margin-bottom:4px;"></div>' +
+        '<div id="history-time" style="color:' + hTimeColor + ';margin-bottom:3px;"></div>' +
+        '<div style="color:' + hStatsColor + ';font-size:11px;margin-bottom:6px;">' +
+        '<span id="history-distance">0 km</span> | ' +
+        '<span id="history-duration">0m</span> | ' +
+        '<span id="history-speed">0 km/h</span>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;">' +
+        '<button id="history-live" onclick="handleHistoryJumpButton()" style="display:none;padding:2px 6px;border:none;border-radius:3px;background:#4285F4;color:white;cursor:pointer;font-size:9px;font-weight:bold;flex-shrink:0;">LIVE</button>' +
+        '</div>' +
+        '<input type="range" id="history-slider" min="0" max="0" value="0" oninput="onHistorySliderInput(this)" onchange="onHistorySliderChange()" style="width:100%;margin-top:4px;">' +
+        '</div>' +
         '</div>' +
         '</div>';
     map.controls[google.maps.ControlPosition.LEFT_TOP].push(controlDiv);
@@ -1001,14 +1001,14 @@ function createDarkModeControl() {
         btn.textContent = 'A';
         btn.title = 'Map theme: Auto (tap to change)';
     }
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function () {
         cycleDarkMode();
     });
     map.controls[google.maps.ControlPosition.LEFT_BOTTOM].push(btn);
 }
 
 function _initDarkModePreference() {
-    try { darkModePreference = localStorage.getItem('darkMode') || 'auto'; } catch(e) {}
+    try { darkModePreference = localStorage.getItem('darkMode') || 'auto'; } catch (e) { }
 
     var enable;
     if (darkModePreference === 'dark') {
@@ -1044,7 +1044,7 @@ function cycleDarkMode() {
     }
 
     _updateDarkModeButton();
-    try { localStorage.setItem('darkMode', darkModePreference); } catch(e) {}
+    try { localStorage.setItem('darkMode', darkModePreference); } catch (e) { }
 }
 
 function _updateDarkModeButton() {
@@ -1102,13 +1102,13 @@ function _updateLayerPanelTextColors(enable) {
     if (historyPanel) historyPanel.style.borderTop = '1px solid ' + borderColor;
 
     var ids = ['history-label', 'history-time'];
-    ids.forEach(function(id) {
+    ids.forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.style.color = id === 'history-label' ? textColor : dimColor;
     });
 
     var statsIds = ['history-distance', 'history-duration', 'history-speed'];
-    statsIds.forEach(function(id) {
+    statsIds.forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.parentElement.style.color = enable ? '#b0b0c8' : '#555';
     });
@@ -1192,13 +1192,13 @@ function fitMapToLivePoints(points) {
     if (!points || points.length === 0) return;
 
     var bounds = new google.maps.LatLngBounds();
-    points.forEach(function(p) {
+    points.forEach(function (p) {
         bounds.extend({ lat: p.lat, lng: p.lng });
     });
     map.fitBounds(bounds);
 
     // Don't zoom in too close
-    google.maps.event.addListenerOnce(map, 'bounds_changed', function() {
+    google.maps.event.addListenerOnce(map, 'bounds_changed', function () {
         if (map.getZoom() > 16) map.setZoom(16);
     });
 }
@@ -1222,7 +1222,7 @@ function truncateLivePolyline(toIndex) {
     if (!livePathsHidden) {
         if (activityLayers['live']) {
             var layer = activityLayers['live'];
-            layer.paths.forEach(function(p) { p.setMap(null); });
+            layer.paths.forEach(function (p) { p.setMap(null); });
         }
         // Also hide the livePolyline if it exists
         if (livePolyline) {
@@ -1263,7 +1263,7 @@ function restoreLivePolyline() {
     if (livePathsHidden) {
         if (activityLayers['live']) {
             var layer = activityLayers['live'];
-            layer.paths.forEach(function(p) { p.setMap(map); });
+            layer.paths.forEach(function (p) { p.setMap(map); });
         }
         // Also show the livePolyline if it exists
         if (livePolyline) {
