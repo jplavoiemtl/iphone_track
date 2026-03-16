@@ -155,10 +155,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // On mobile, start with sidebar hidden
+    // On mobile, start with sidebar open so user must tap to dismiss,
+    // which provides the user gesture needed for Wake Lock acquisition
     if (isMobile.matches) {
-        sidebar.classList.add('hidden');
-        document.body.classList.add('sidebar-collapsed');
+        sidebar.classList.remove('hidden');
+        document.body.classList.add('sidebar-open');
         updateToggleIcon();
     }
 
@@ -1711,12 +1712,14 @@ function enableKeepAwake() {
             }, 3000);
         }
         // If failed without wakeLockActive (no user gesture on page load),
-        // wait for first tap then retry
+        // mark as active (so toggle works correctly) and wait for gesture
         if (!wakeLockActive && !window._wakeLockGestureListener) {
+            wakeLockActive = true;
+            updateAwakeButton(true);
             window._wakeLockGestureListener = function() {
                 document.removeEventListener('click', window._wakeLockGestureListener);
                 window._wakeLockGestureListener = null;
-                if (!wakeLockActive) enableKeepAwake();
+                if (wakeLockActive) enableKeepAwake();
             };
             document.addEventListener('click', window._wakeLockGestureListener);
             console.log('[WakeLock] Waiting for user gesture to acquire lock');
@@ -1730,12 +1733,26 @@ function disableKeepAwake() {
     // that point, the listener in enableKeepAwake() would immediately re-acquire
     // the lock, making it impossible to turn off.
     wakeLockActive = false;
+    // Cancel pending gesture listener if lock was never actually acquired
+    if (window._wakeLockGestureListener) {
+        document.removeEventListener('click', window._wakeLockGestureListener);
+        window._wakeLockGestureListener = null;
+    }
     if (wakeLock) {
         wakeLock.release();
         wakeLock = null;
     }
     updateAwakeButton(false);
 }
+
+// Re-acquire wake lock when page becomes visible again (e.g., after screen
+// dims/locks or tab switch). Browsers grant implicit gesture context on
+// visibilitychange, making this the recommended pattern for robust wake lock.
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && wakeLockActive && !wakeLock) {
+        enableKeepAwake();
+    }
+});
 
 function updateAwakeButton(isOn) {
     var btn = document.getElementById('live-awake-btn');
