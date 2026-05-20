@@ -1815,7 +1815,7 @@ function updateSpeedOverlay() {
 
     if (latestRide && latestRide.avg_speed !== undefined) {
         var spd = latestRide.avg_speed;
-        valueEl.textContent = spd < 10 ? spd.toFixed(1) : Math.round(spd);
+        valueEl.textContent = spd.toFixed(1);
     } else {
         valueEl.textContent = '--';
     }
