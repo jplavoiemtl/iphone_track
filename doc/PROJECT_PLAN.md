@@ -68,11 +68,111 @@ frequently visited places.
 Allow users to relabel an activity, merge or split trips, exclude incorrect GPS
 points, and save corrections so detected results can be trusted and refined.
 
-### 3. Live Tracking Health
+### 3. Live Tracking Diagnostics
 
-Make connection state explicit by showing the age of the latest GPS fix,
-whether points arrived late or in a batch, and a clear warning when the phone
-has stopped reporting.
+**Status:** Complete and verified on iPhone 2026-07-11
+
+#### Goal and User Benefit
+
+Explain exceptional tracking conditions without duplicating the existing
+bottom-center GPS freshness display. Users should be able to distinguish an old
+GPS fix from a browser connectivity problem, an application/API failure, or a
+delayed batch upload.
+
+#### Existing Behavior to Preserve
+
+- Keep the compact bottom-center speed and last-fix-age panel unchanged.
+- Continue calculating freshness from the newest GPS point timestamp.
+- Preserve the current colors: green below 2 minutes, orange from 2-5 minutes,
+  and red at 5 minutes or more.
+- Do not add another persistent "Last GPS update" card during normal operation.
+
+#### Proposed Experience
+
+- Show a compact, exception-only status pill immediately above the existing
+  speed/fix panel.
+- Keep the pill to one short line, such as `PHONE OFFLINE`, `SERVER UNREACHABLE`,
+  or `DELAYED DATA RECEIVED`.
+- Make the pill at least 44 pixels tall and respect the iPhone safe area.
+- Tapping the pill opens a small bottom sheet with the last GPS fix age, last
+  successful poll age, a plain-language explanation, and recovery status.
+- Show the same detailed state in the Live sidebar below its current status row.
+- Hide the pill automatically after recovery. Normal tracking shows no pill.
+
+#### Diagnostic States
+
+- **Browser offline:** Show immediately when the browser reports that it is
+  offline; remove after connectivity returns and a poll succeeds.
+- **Application/API unreachable:** Show after two consecutive poll failures to
+  avoid flashing on a single transient error.
+- **Upstream tracking service unavailable:** The backend must distinguish an
+  OwnTracks request failure from a successful request containing no new GPS
+  points. Do not label ordinary GPS silence as a server failure.
+- **Delayed batch received:** Show a temporary informational pill when multiple
+  historical GPS points arrive together and the newest received fix is already
+  stale. Return to the normal freshness display when a current fix arrives.
+- **No fresh GPS data:** Use only the existing orange/red age indicator when
+  polling succeeds but the phone has supplied no newer point.
+
+#### Technical Scope
+
+- `static/js/app.js`: diagnostic state machine, consecutive-failure tracking,
+  browser online/offline handling, batch detection, recovery, and bottom sheet.
+- `templates/index.html`: exception pill, accessible status text, and diagnostic
+  detail container.
+- `static/css/style.css`: responsive pill and bottom-sheet styling, including
+  safe-area spacing and dark-mode colors.
+- `lib/owntracks.py` and `app.py`: preserve upstream request outcome separately
+  from an empty successful result and return non-sensitive health metadata.
+
+#### Implementation and Verification
+
+Implemented an exception-only map pill, matching Live sidebar status, and a
+tap-open detail sheet. Live polling now distinguishes browser connectivity,
+application/API failures, OwnTracks availability, delayed batches, and ordinary
+GPS silence without duplicating the existing freshness indicator.
+
+During iPhone testing, landscape mode exposed a pre-existing responsive-layout
+problem: the wider landscape viewport selected desktop sidebar rules, `100vh`
+did not match Safari's visible height, and the hamburger position used `85vw`
+even though the sidebar was capped at 380 pixels. Later fixes initially appeared
+ineffective because iPhone retained older CSS and JavaScript.
+
+The verified fix:
+
+- Treat short, coarse-pointer landscape screens as mobile layouts
+- Synchronize layout height with the Visual Viewport API
+- Respect safe areas and raise/compact bottom overlays in landscape
+- Keep the hamburger aligned with the capped sidebar and handle `touchend`
+- Trigger a Google Maps resize after rotation
+- Version static assets by modification time and disable caching for the HTML shell
+
+Verified manually on iPhone in portrait and landscape: full-width map, complete
+speed/freshness panel, responsive hamburger, offline warning, detail sheet, and
+recovery behavior.
+
+#### Non-Goals
+
+- Changing the existing freshness thresholds or colors
+- Replacing the bottom-center speed/fix panel
+- Showing a permanent healthy/current status message on the map
+- Sending Pushcut notifications in the first version
+- Displaying server addresses, private hostnames, device identifiers, or other
+  sensitive infrastructure details
+
+#### Acceptance Criteria
+
+1. Normal tracking looks exactly as it does today, with no additional banner.
+2. A stale GPS fix with successful polling shows only the existing age color.
+3. Browser offline and repeated API failures produce distinct, accurate labels.
+4. An OwnTracks failure is not reported as ordinary "no new data," and ordinary
+   GPS silence is not reported as a server failure.
+5. A delayed batch produces a temporary informational state and does not reset
+   freshness to green unless the newest GPS timestamp is actually current.
+6. Tapping the pill opens readable details and recovery information.
+7. The pill and detail sheet work on iPhone without covering playback controls,
+   map controls, or the safe area.
+8. All messages avoid credentials and sensitive infrastructure information.
 
 ### 4. Export and Privacy Controls
 
@@ -88,6 +188,7 @@ a route near sensitive locations such as home.
 - 2026-03: Added track-art images, start/end markers, and EXIF GPS metadata
 - 2026-03: Added HTTPS wake lock support and gevent-based deployment
 - 2026-03: Made Live Mode the default and improved mobile startup behavior
+- 2026-07: Added verified Live Tracking Diagnostics and iPhone landscape fixes
 
 ## Planning Workflow
 

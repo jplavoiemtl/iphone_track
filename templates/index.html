@@ -3,9 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>iPhone Tracker</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v={{ static_version }}">
 </head>
 
 <body>
@@ -30,6 +30,11 @@
                 <span id="live-status-text">Stopped</span>
                 <span id="live-last-update"></span>
             </div>
+            <button id="tracking-diagnostic-sidebar" class="tracking-diagnostic-sidebar"
+                type="button" hidden>
+                <span id="tracking-diagnostic-sidebar-label"></span>
+                <span class="tracking-diagnostic-sidebar-hint">Tap for details</span>
+            </button>
 
             <div class="live-session-start">
                 <div class="session-label">SESSION START</div>
@@ -177,6 +182,10 @@
             <button id="pause-play-btn">Pause</button>
             <input type="range" id="animation-slider" min="0" max="0" value="0" disabled>
         </div>
+        <button id="tracking-diagnostic-pill" class="tracking-diagnostic-pill" type="button"
+            aria-haspopup="dialog" aria-controls="tracking-diagnostic-sheet" hidden>
+            <span id="tracking-diagnostic-pill-label"></span>
+        </button>
         <div id="speed-overlay" style="display:none;">
             <div id="speed-row">
                 <div id="speed-value">--</div>
@@ -186,8 +195,28 @@
         </div>
     </div>
 
-    <script src="/static/js/map.js"></script>
-    <script src="/static/js/app.js"></script>
+    <div id="tracking-diagnostic-backdrop" class="tracking-diagnostic-backdrop" hidden></div>
+    <section id="tracking-diagnostic-sheet" class="tracking-diagnostic-sheet"
+        role="dialog" aria-modal="true" aria-labelledby="tracking-diagnostic-title" hidden>
+        <div class="tracking-diagnostic-sheet-header">
+            <div>
+                <div class="session-label">LIVE TRACKING</div>
+                <h2 id="tracking-diagnostic-title">Tracking status</h2>
+            </div>
+            <button id="tracking-diagnostic-close" type="button" aria-label="Close tracking status">
+                &#10005;
+            </button>
+        </div>
+        <p id="tracking-diagnostic-message"></p>
+        <dl class="tracking-diagnostic-facts">
+            <div><dt>Last GPS fix</dt><dd id="tracking-diagnostic-fix-age">--</dd></div>
+            <div><dt>Last successful poll</dt><dd id="tracking-diagnostic-poll-age">--</dd></div>
+        </dl>
+        <p id="tracking-diagnostic-recovery" class="tracking-diagnostic-recovery"></p>
+    </section>
+
+    <script src="/static/js/map.js?v={{ static_version }}"></script>
+    <script src="/static/js/app.js?v={{ static_version }}"></script>
     <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap" async
         defer></script>
 </body>

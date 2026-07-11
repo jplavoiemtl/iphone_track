@@ -27,6 +27,12 @@ var pollInProgress = false;
 // 1-second ticker for last-fix age display in speed overlay
 var lastFixInterval = null;
 
+// Exception-only live tracking diagnostics
+var trackingDiagnosticState = null;
+var consecutivePollFailures = 0;
+var lastSuccessfulPollTimestamp = 0;
+var trackingDiagnosticTimer = null;
+
 // Screen keep-awake via native Wake Lock API (HTTPS required)
 var wakeLockActive = false;
 var wakeLock = null;
@@ -56,7 +62,27 @@ function toggleDatetimeActivities() {
     }
 }
 
+function syncVisualViewport() {
+    var viewport = window.visualViewport;
+    var height = viewport ? viewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', Math.round(height) + 'px');
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    syncVisualViewport();
+    window.addEventListener('resize', syncVisualViewport);
+    window.addEventListener('orientationchange', function() {
+        setTimeout(function() {
+            syncVisualViewport();
+            if (typeof google !== 'undefined' && map) {
+                google.maps.event.trigger(map, 'resize');
+            }
+        }, 250);
+    });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', syncVisualViewport);
+    }
+
     var startDateInput = document.getElementById('start-date');
     var endDateInput = document.getElementById('end-date');
 
@@ -117,11 +143,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    initTrackingDiagnostics();
+
     // Sidebar toggle
     var sidebar = document.getElementById('sidebar');
     var sidebarToggle = document.getElementById('sidebar-toggle');
     var backdrop = document.getElementById('sidebar-backdrop');
-    var isMobile = window.matchMedia('(max-width: 768px)');
+    var isMobile = window.matchMedia('(max-width: 768px), (orientation: landscape) and (max-height: 500px) and (pointer: coarse)');
 
     function updateToggleIcon() {
         var isHidden = sidebar.classList.contains('hidden');
@@ -148,7 +176,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 350);
     }
 
-    sidebarToggle.addEventListener('click', toggleSidebar);
+    var lastSidebarTouch = 0;
+    sidebarToggle.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        lastSidebarTouch = Date.now();
+        toggleSidebar();
+    }, { passive: false });
+    sidebarToggle.addEventListener('click', function() {
+        if (Date.now() - lastSidebarTouch < 500) return;
+        toggleSidebar();
+    });
     backdrop.addEventListener('click', function() {
         if (!sidebar.classList.contains('hidden')) {
             toggleSidebar();
@@ -1652,6 +1689,7 @@ function startLivePolling() {
 
     updateLiveIndicator(true);
     showSpeedOverlay(true);
+    if (!navigator.onLine) setTrackingDiagnostic('offline');
 
     // 1-second ticker for last-fix age in speed overlay
     lastFixInterval = setInterval(updateLastFixAge, 1000);
@@ -1675,6 +1713,10 @@ function stopLivePolling() {
     pollInProgress = false;
     updateLiveIndicator(false);
     showSpeedOverlay(false);
+    consecutivePollFailures = 0;
+    lastSuccessfulPollTimestamp = 0;
+    setTrackingDiagnostic(null);
+    closeTrackingDiagnostic();
     disableKeepAwake();
 }
 
@@ -1760,6 +1802,185 @@ function updateAwakeButton(isOn) {
     btn.textContent = 'Screen Awake: ' + (isOn ? 'ON' : 'OFF');
     btn.style.backgroundColor = isOn ? '#53cf6e' : '';
 }
+var TRACKING_DIAGNOSTICS = {
+    offline: {
+        label: 'PHONE OFFLINE', title: 'Phone offline', level: 'error',
+        message: 'This browser has no network connection.',
+        recovery: 'Waiting for network access and a successful tracking poll.'
+    },
+    api: {
+        label: 'APP UNREACHABLE', title: 'Application unreachable', level: 'error',
+        message: 'The app could not complete two tracking polls in a row.',
+        recovery: 'The warning will clear after a successful poll.'
+    },
+    upstream: {
+        label: 'TRACKING SERVER ISSUE', title: 'Tracking service unavailable', level: 'error',
+        message: 'The app is running, but the tracking service did not return a valid response.',
+        recovery: 'GPS silence alone does not trigger this warning.'
+    },
+    batch: {
+        label: 'DELAYED DATA RECEIVED', title: 'Delayed GPS data received', level: 'info',
+        message: 'Several older GPS points arrived together.',
+        recovery: 'Freshness remains based on the newest GPS timestamp.'
+    }
+};
+
+function initTrackingDiagnostics() {
+    var pill = document.getElementById('tracking-diagnostic-pill');
+    var sidebar = document.getElementById('tracking-diagnostic-sidebar');
+    var closeBtn = document.getElementById('tracking-diagnostic-close');
+    var backdrop = document.getElementById('tracking-diagnostic-backdrop');
+    if (pill) pill.addEventListener('click', openTrackingDiagnostic);
+    if (sidebar) sidebar.addEventListener('click', openTrackingDiagnostic);
+    if (closeBtn) closeBtn.addEventListener('click', closeTrackingDiagnostic);
+    if (backdrop) backdrop.addEventListener('click', closeTrackingDiagnostic);
+
+    window.addEventListener('offline', function() {
+        if (pollTimer || pollInProgress) setTrackingDiagnostic('offline');
+    });
+    window.addEventListener('online', function() {
+        if (trackingDiagnosticState && trackingDiagnosticState.type === 'offline') {
+            trackingDiagnosticState.message = 'Network access returned. Confirming tracking now.';
+            trackingDiagnosticState.recovery = 'Waiting for the next successful poll.';
+            renderTrackingDiagnostic();
+        }
+        if ((pollTimer || pollInProgress) && !pollInProgress) schedulePoll(0);
+    });
+}
+
+function setTrackingDiagnostic(type, options) {
+    clearTimeout(trackingDiagnosticTimer);
+    trackingDiagnosticTimer = null;
+    if (!type) {
+        trackingDiagnosticState = null;
+        renderTrackingDiagnostic();
+        closeTrackingDiagnostic();
+        return;
+    }
+
+    var config = TRACKING_DIAGNOSTICS[type];
+    if (!config) return;
+    options = options || {};
+    trackingDiagnosticState = {
+        type: type, label: config.label, title: config.title, level: config.level,
+        message: options.message || config.message,
+        recovery: options.recovery || config.recovery
+    };
+    renderTrackingDiagnostic();
+
+    if (type === 'batch') {
+        trackingDiagnosticTimer = setTimeout(function() {
+            if (trackingDiagnosticState && trackingDiagnosticState.type === 'batch') {
+                setTrackingDiagnostic(null);
+            }
+        }, 12000);
+    }
+}
+
+function renderTrackingDiagnostic() {
+    var pill = document.getElementById('tracking-diagnostic-pill');
+    var pillLabel = document.getElementById('tracking-diagnostic-pill-label');
+    var sidebar = document.getElementById('tracking-diagnostic-sidebar');
+    var sidebarLabel = document.getElementById('tracking-diagnostic-sidebar-label');
+    if (!pill || !sidebar) return;
+    if (!trackingDiagnosticState) {
+        pill.hidden = true;
+        sidebar.hidden = true;
+        return;
+    }
+    pill.className = 'tracking-diagnostic-pill ' + trackingDiagnosticState.level;
+    sidebar.className = 'tracking-diagnostic-sidebar ' + trackingDiagnosticState.level;
+    pillLabel.textContent = trackingDiagnosticState.label;
+    sidebarLabel.textContent = trackingDiagnosticState.label;
+    pill.hidden = false;
+    sidebar.hidden = false;
+    updateTrackingDiagnosticDetails();
+}
+
+function formatDiagnosticAge(timestamp) {
+    if (!timestamp) return 'Not available';
+    var age = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
+    if (age < 60) return age + (age === 1 ? ' second ago' : ' seconds ago');
+    if (age < 3600) {
+        var ageMinutes = Math.floor(age / 60);
+        return ageMinutes + (ageMinutes === 1 ? ' minute ago' : ' minutes ago');
+    }
+    var hours = Math.floor(age / 3600);
+    var minutes = Math.floor((age % 3600) / 60);
+    return hours + 'h ' + minutes + 'm ago';
+}
+
+function updateTrackingDiagnosticDetails() {
+    if (!trackingDiagnosticState) return;
+    var values = {
+        'tracking-diagnostic-title': trackingDiagnosticState.title,
+        'tracking-diagnostic-message': trackingDiagnosticState.message,
+        'tracking-diagnostic-recovery': trackingDiagnosticState.recovery,
+        'tracking-diagnostic-fix-age': formatDiagnosticAge(lastDrawnTimestamp),
+        'tracking-diagnostic-poll-age': formatDiagnosticAge(lastSuccessfulPollTimestamp)
+    };
+    Object.keys(values).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = values[id];
+    });
+}
+
+function openTrackingDiagnostic() {
+    if (!trackingDiagnosticState) return;
+    updateTrackingDiagnosticDetails();
+    document.getElementById('tracking-diagnostic-sheet').hidden = false;
+    document.getElementById('tracking-diagnostic-backdrop').hidden = false;
+}
+
+function closeTrackingDiagnostic() {
+    var sheet = document.getElementById('tracking-diagnostic-sheet');
+    var backdrop = document.getElementById('tracking-diagnostic-backdrop');
+    if (sheet) sheet.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+}
+
+function recordLivePollFailure() {
+    if (!navigator.onLine) {
+        setTrackingDiagnostic('offline');
+        return;
+    }
+    consecutivePollFailures += 1;
+    if (consecutivePollFailures >= 2) setTrackingDiagnostic('api');
+}
+
+function getDelayedBatchInfo(points) {
+    if (!points || points.length < 2) return null;
+    var newestTimestamp = 0;
+    for (var i = 0; i < points.length; i++) {
+        newestTimestamp = Math.max(newestTimestamp, points[i].tst || 0);
+    }
+    var newestAge = Math.floor(Date.now() / 1000) - newestTimestamp;
+    if (newestAge < 120) return null;
+    return { count: points.length, newestTimestamp: newestTimestamp };
+}
+
+function handleSuccessfulLivePoll(data) {
+    consecutivePollFailures = 0;
+    lastSuccessfulPollTimestamp = Math.floor(Date.now() / 1000);
+    if (!navigator.onLine) {
+        setTrackingDiagnostic('offline');
+        return;
+    }
+    if (data.tracking_service_status === 'unavailable') {
+        setTrackingDiagnostic('upstream');
+        return;
+    }
+
+    var batch = getDelayedBatchInfo(data.new_points);
+    if (batch) {
+        setTrackingDiagnostic('batch', {
+            message: batch.count + ' older GPS points arrived together. The newest is ' +
+                formatDiagnosticAge(batch.newestTimestamp) + '.'
+        });
+        return;
+    }
+    setTrackingDiagnostic(null);
+}
 
 function updateLastFixAge() {
     var el = document.getElementById('last-fix-age');
@@ -1768,6 +1989,7 @@ function updateLastFixAge() {
     if (!lastDrawnTimestamp) {
         el.textContent = '\u2299 --';
         el.style.color = '';
+        updateTrackingDiagnosticDetails();
         return;
     }
 
@@ -1789,6 +2011,7 @@ function updateLastFixAge() {
     } else {
         el.style.color = '#e05252';   // red — phone likely offline
     }
+    updateTrackingDiagnosticDetails();
 }
 
 function showSpeedOverlay(visible) {
@@ -1834,16 +2057,22 @@ function pollLiveData() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ last_drawn_timestamp: lastDrawnTimestamp })
     })
-    .then(function(response) { return response.json(); })
+    .then(function(response) {
+        if (!response.ok) throw new Error('Live poll returned HTTP ' + response.status);
+        return response.json();
+    })
     .then(function(data) {
         pollInProgress = false;
 
         if (!data.success) {
             console.error('Poll failed:', data.error);
+            recordLivePollFailure();
             updateLastFixAge();                      // Phase 19: restore ⊙ color
             schedulePoll(POLL_PERIOD_S * 1000);      // Phase 18: retry after one cycle
             return;
         }
+
+        handleSuccessfulLivePoll(data);
 
         // Update cached data
         liveData = Object.assign(liveData || {}, data);
@@ -1907,6 +2136,7 @@ function pollLiveData() {
     .catch(function(err) {
         pollInProgress = false;
         console.error('Poll error:', err.message);
+        recordLivePollFailure();
         updateLastFixAge();                      // Phase 19: restore ⊙ color
         schedulePoll(POLL_PERIOD_S * 1000);      // Phase 18: retry after one cycle
     });

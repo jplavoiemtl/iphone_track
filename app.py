@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, Response
+from flask import Flask, render_template, request, jsonify, session, Response, make_response
 import json
 import os
 import pytz
@@ -57,7 +57,19 @@ def _reset_live_cache():
 
 @app.route("/")
 def index():
-    return render_template("index.html", google_maps_api_key=config.GOOGLE_MAPS_API_KEY)
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+    static_version = int(max(
+        os.path.getmtime(os.path.join(static_dir, "css", "style.css")),
+        os.path.getmtime(os.path.join(static_dir, "js", "app.js")),
+        os.path.getmtime(os.path.join(static_dir, "js", "map.js"))
+    ))
+    response = make_response(render_template(
+        "index.html",
+        google_maps_api_key=config.GOOGLE_MAPS_API_KEY,
+        static_version=static_version
+    ))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 @app.route("/api/detect", methods=["POST"])
@@ -884,7 +896,7 @@ def live_poll():
     to_dt = datetime.fromtimestamp(now, tz=pytz.UTC).astimezone(detected_tz)
 
     # Fetch new data
-    new_data = fetch_owntracks_data(
+    new_data, tracking_service_status = fetch_owntracks_data(
         from_dt.strftime('%Y-%m-%d'),
         to_dt.strftime('%Y-%m-%d'),
         from_dt.strftime('%H:%M:%S'),
@@ -894,7 +906,8 @@ def live_poll():
         user=config.OWNTRACKS_USER,
         device_id=config.OWNTRACKS_DEVICE_ID,
         target_timezone=detected_tz,
-        default_timezone=config.DEFAULT_TIMEZONE
+        default_timezone=config.DEFAULT_TIMEZONE,
+        return_status=True
     )
 
     new_points = []
@@ -974,6 +987,7 @@ def live_poll():
         "total_duration": total_duration,
         "last_point_time": last_point_time,
         "stats": stats_response,
+        "tracking_service_status": tracking_service_status,
         "last_poll_timestamp": now
     })
 
