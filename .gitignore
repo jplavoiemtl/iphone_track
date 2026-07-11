@@ -17,7 +17,8 @@ map.html
 saved_maps/
 
 # Documentation (contains credentials)
-doc/
+doc/**
+!doc/PROJECT_PLAN.md
 
 # Data files
 gunicorn.ctl
