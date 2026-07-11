@@ -122,5 +122,13 @@ cd /home/pi/appjpl/iphone_track && docker build -t iphone_track .
 4. No rebuild, no container restart needed
 
 ## Planning & Documentation
-- All planning documents and implementation plans go in the `doc/` folder
+- Use `doc/PROJECT_PLAN.md` as the single canonical planning document
+- Update that file instead of creating new phase-plan documents
+- Keep the project plan suitable for a public Git repository: never include API
+  keys, tokens, passwords, webhook URLs, private certificates, environment values,
+  private IP addresses or hostnames, device identifiers, usernames, precise home
+  locations, or raw GPS coordinates
+- Refer to secrets only by environment-variable name and use placeholders for
+  sensitive infrastructure details
+- Review the planning-file diff for sensitive values before every commit
 - Never place plan files outside the project directory

@@ -10,6 +10,18 @@ Use this file for active work, priorities, decisions, and short completion notes
 Older documents in this folder are historical references and should not be
 extended with new phases.
 
+## Security and Privacy Rules
+
+This file is tracked in Git and must be safe for a public repository.
+
+- Never include API keys, tokens, passwords, webhook URLs, session keys,
+  private certificates, or actual environment-variable values.
+- Never include private IP addresses, internal hostnames, device identifiers,
+  usernames, precise home locations, or raw GPS coordinates.
+- Refer to configuration only by environment-variable name, and use placeholders
+  such as `<OWNTRACKS_HOST>` when an example needs an infrastructure value.
+- Review this file's Git diff for sensitive information before every commit.
+
 ## Current Product State
 
 iPhone Tracker is a Flask web application that reads OwnTracks GPS data and
