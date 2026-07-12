@@ -2674,10 +2674,12 @@ function updateHistoryPanel() {
     var label = document.getElementById('history-label');
     if (label) {
         if (historyModeActive) {
-            label.textContent = '📍 VIEWING • Point ' + (viewIndex + 1) + '/' + totalPoints;
+            label.innerHTML = '<span class="history-state-icon viewing" aria-hidden="true">\u{1F4CD}</span> VIEWING \u2022 Point ' +
+                (viewIndex + 1) + '/' + totalPoints;
             label.className = 'history-label viewing';
         } else {
-            label.textContent = '📍 LIVE • Point ' + totalPoints + '/' + totalPoints;
+            label.innerHTML = '<span class="history-state-icon live" aria-hidden="true">\u25CF</span> LIVE \u2022 Point ' +
+                totalPoints + '/' + totalPoints;
             label.className = 'history-label live';
         }
     }

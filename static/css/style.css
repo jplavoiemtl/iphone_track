@@ -1082,11 +1082,29 @@ body {
 }
 
 .history-label.live {
-    color: #4285F4;
+    color: #ff00ff !important;
 }
 
 .history-label.viewing {
-    color: #FF8C00;
+    color: #FF8C00 !important;
+}
+
+.history-state-icon {
+    display: inline-block;
+    width: 18px;
+    text-align: center;
+}
+
+.history-state-icon.live {
+    color: #ff00ff;
+    text-shadow: 0 0 5px rgba(255, 0, 255, 0.65);
+    animation: live-layer-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .history-state-icon.live {
+        animation: none;
+    }
 }
 
 #history-panel button:disabled {

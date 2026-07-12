@@ -193,6 +193,8 @@ Layers panel without making the panel wider.
 - Keep one compact row per active layer.
 - Preserve each activity icon but remove the visible activity name.
 - Give Live a unique magenta dot instead of sharing the All-layer pin icon.
+- Reuse the pulsing magenta dot for the history status only when it is `LIVE`;
+  retain the static pin and orange treatment when reviewing `VIEWING` history.
 - Apply a subtle pulse to the Live dot, disabled when reduced motion is preferred.
 - Increase layer-row statistics from 10px to a responsive 12-14px and retain
   compact separators.
