@@ -899,7 +899,7 @@ function createLayerControl() {
     var controlDiv = document.createElement('div');
     controlDiv.id = 'mapLayerControl';
     controlDiv.innerHTML =
-        '<div id="layerPanelOuter" style="background:' + panelBg + ';border:' + panelBorder + ';border-radius:8px;margin:8px 4px;padding:8px 10px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);width:252px;max-width:calc(100vw - 70px);">' +
+        '<div id="layerPanelOuter" style="background:' + panelBg + ';border:' + panelBorder + ';border-radius:8px;margin:8px 4px;padding:8px 10px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);width:262px;max-width:calc(100vw - 70px);">' +
         '<div id="layerPanelHeader" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:2px 0;" onclick="toggleLayerPanel()">' +
         '<span style="font-weight:bold;color:' + titleColor + ';font-size:13px;">Active Layers</span>' +
         '<span id="layerPanelArrow" style="font-size:10px;color:' + arrowColor + ';margin-left:8px;">&#9660;</span>' +
