@@ -8,7 +8,7 @@ var activityConfig = {
     'bike': { color: '#FFD700', icon: '\u{1F6B4}', name: 'Bike' },
     'other': { color: '#4444FF', icon: '\u{1F6B6}', name: 'Other' },
     'all': { color: '#FFA500', icon: '\u{1F4CD}', name: 'All' },
-    'live': { color: '#FF00FF', icon: '\u{1F4CD}', name: 'Live' }
+    'live': { color: '#FF00FF', icon: '\u25CF', name: 'Live' }
 };
 
 // Dark mode state
@@ -899,7 +899,7 @@ function createLayerControl() {
     var controlDiv = document.createElement('div');
     controlDiv.id = 'mapLayerControl';
     controlDiv.innerHTML =
-        '<div id="layerPanelOuter" style="background:' + panelBg + ';border:' + panelBorder + ';border-radius:8px;margin:8px 4px;padding:8px 10px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);max-width:calc(100vw - 70px);">' +
+        '<div id="layerPanelOuter" style="background:' + panelBg + ';border:' + panelBorder + ';border-radius:8px;margin:8px 4px;padding:8px 10px;font-family:Arial,sans-serif;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,0.3);width:240px;max-width:calc(100vw - 70px);">' +
         '<div id="layerPanelHeader" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:2px 0;" onclick="toggleLayerPanel()">' +
         '<span style="font-weight:bold;color:' + titleColor + ';font-size:13px;">Active Layers</span>' +
         '<span id="layerPanelArrow" style="font-size:10px;color:' + arrowColor + ';margin-left:8px;">&#9660;</span>' +
@@ -908,8 +908,8 @@ function createLayerControl() {
         '<div id="mapLayerList" style="margin-top:6px;"></div>' +
         '<div id="history-panel" style="display:none;border-top:' + hBorder + ';margin-top:6px;padding-top:6px;">' +
         '<div id="history-label" class="history-label live" style="font-weight:bold;color:' + hLabelColor + ';margin-bottom:4px;"></div>' +
-        '<div id="history-time" style="color:' + hTimeColor + ';margin-bottom:3px;"></div>' +
-        '<div style="color:' + hStatsColor + ';font-size:11px;margin-bottom:6px;">' +
+        '<div id="history-time" class="history-time" style="color:' + hTimeColor + ';margin-bottom:3px;"></div>' +
+        '<div class="history-summary-stats" style="color:' + hStatsColor + ';margin-bottom:6px;">' +
         '<span id="history-distance">0 km</span> | ' +
         '<span id="history-duration">0m</span> | ' +
         '<span id="history-speed">0 km/h</span>' +
@@ -948,7 +948,6 @@ function updateLayerControl() {
             // Single compact row per layer
             var rowBg = darkModeEnabled ? 'rgba(15, 52, 96, 0.6)' : 'rgba(248,248,248,0.8)';
             var rowBorder = darkModeEnabled ? '1px solid #16213e' : '1px solid #e0e0e0';
-            var nameColor = darkModeEnabled ? '#e0e0e0' : '#333';
             var statsColor = darkModeEnabled ? '#a0a0b8' : '#666';
 
             var row = document.createElement('div');
@@ -964,16 +963,18 @@ function updateLayerControl() {
                     Math.floor(durationMins / 60) + 'h' + (durationMins % 60) + 'm' :
                     durationMins + 'm';
                 var avgSpeed = stats.duration > 0 ? (stats.distance / stats.duration * 3600) : 0;
-                statsHtml = '<span style="color:' + statsColor + ';font-size:10px;white-space:nowrap;">' +
-                    stats.distance.toFixed(1) + 'km ' + durationStr + ' ' + avgSpeed.toFixed(0) + 'km/h</span>';
+                statsHtml = '<span class="layer-row-stats" style="color:' + statsColor + ';">' +
+                    stats.distance.toFixed(1) + 'km &middot; ' + durationStr + ' &middot; ' +
+                    avgSpeed.toFixed(0) + 'km/h</span>';
             }
 
+            var iconClass = activityType === 'live' ? 'layer-activity-icon live' : 'layer-activity-icon';
+            var buttonLabel = (isVisible ? 'Hide ' : 'Show ') + config.name + ' layer';
             row.innerHTML =
-                '<span style="font-size:14px;width:18px;text-align:center;flex-shrink:0;">' + config.icon + '</span>' +
-                '<span style="font-weight:500;color:' + nameColor + ';font-size:12px;white-space:nowrap;">' + config.name + '</span>' +
+                '<span class="' + iconClass + '" role="img" aria-label="' + config.name + ' layer" title="' + config.name + '">' + config.icon + '</span>' +
                 (statsHtml ? statsHtml : '') +
-                '<button ' + buttonId + ' onclick="toggleLayer(\'' + activityType + '\')" style="margin-left:auto;padding:2px 6px;border:none;border-radius:3px;color:white;font-size:9px;font-weight:bold;cursor:pointer;flex-shrink:0;background-color:' + config.color + ';opacity:' + (isVisible ? '1' : '0.5') + ';">' +
-                (isVisible ? 'Hide' : 'Show') + '</button>';
+                '<button ' + buttonId + ' aria-label="' + buttonLabel + '" title="' + buttonLabel + '" onclick="toggleLayer(\'' + activityType + '\')" style="margin-left:auto;padding:2px 6px;border:none;border-radius:3px;color:white;font-size:9px;font-weight:bold;cursor:pointer;flex-shrink:0;background-color:' + config.color + ';opacity:' + (isVisible ? '1' : '0.5') + ';"><span>' +
+                (isVisible ? 'Hide' : 'Show') + '</span></button>';
 
             layerList.appendChild(row);
         }

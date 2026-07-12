@@ -179,6 +179,39 @@ recovery behavior.
 Add GPX, GeoJSON, or CSV export and an option to hide the beginning and end of
 a route near sensitive locations such as home.
 
+### 5. Active Layer Panel Readability
+
+**Status:** Complete and visually verified 2026-07-11
+
+#### Goal
+
+Improve readability of distance, duration, and speed in the Live map's Active
+Layers panel without making the panel wider.
+
+#### Design
+
+- Keep one compact row per active layer.
+- Preserve each activity icon but remove the visible activity name.
+- Give Live a unique magenta dot instead of sharing the All-layer pin icon.
+- Apply a subtle pulse to the Live dot, disabled when reduced motion is preferred.
+- Increase layer-row statistics from 10px to a responsive 12-14px and retain
+  compact separators.
+- Increase the history label, timestamp, and summary statistics to 14px while
+  preserving the existing panel width.
+- Preserve Hide/Show controls and the panel's approximate current width.
+- Keep activity identity available through `title` and `aria-label` attributes.
+- Keep All, Car, Bike, and Other icons unchanged.
+
+#### Acceptance Criteria
+
+1. Distance, duration, and speed are noticeably easier to read.
+2. The panel does not become wider than its current visual footprint.
+3. Activity names are not displayed in layer rows.
+4. Live is clearly distinct from All without relying on visible text.
+5. Every icon and visibility button retains an accessible activity label.
+6. Long statistics remain on one line without overlapping Hide/Show controls.
+7. The layout remains usable in iPhone portrait and landscape modes.
+
 ## Completed Milestones
 
 - 2026-02: Converted the original tracker into a Flask web application
@@ -189,6 +222,7 @@ a route near sensitive locations such as home.
 - 2026-03: Added HTTPS wake lock support and gevent-based deployment
 - 2026-03: Made Live Mode the default and improved mobile startup behavior
 - 2026-07: Added verified Live Tracking Diagnostics and iPhone landscape fixes
+- 2026-07: Improved Active Layers readability with larger statistics and a unique Live icon
 
 ## Planning Workflow
 

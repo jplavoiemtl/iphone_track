@@ -1016,11 +1016,69 @@ body {
     }
 }
 
+/* Active layer rows */
+.layer-activity-icon {
+    width: 20px;
+    flex: 0 0 20px;
+    font-size: 16px;
+    line-height: 1;
+    text-align: center;
+}
+
+.layer-activity-icon.live {
+    color: #ff00ff;
+    font-size: 18px;
+    text-shadow: 0 0 5px rgba(255, 0, 255, 0.65);
+    animation: live-layer-pulse 1.8s ease-in-out infinite;
+}
+
+.layer-row-stats {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    font-size: clamp(12px, 3.5vw, 14px);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.15px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+@keyframes live-layer-pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(0.88);
+    }
+    50% {
+        opacity: 0.58;
+        transform: scale(1.12);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .layer-activity-icon.live {
+        animation: none;
+    }
+}
+
 /* ============================
    History Navigation Panel
    ============================ */
 .history-label {
-    font-size: 13px;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-time,
+.history-summary-stats {
+    overflow: hidden;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .history-label.live {
