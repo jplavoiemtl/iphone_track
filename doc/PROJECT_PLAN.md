@@ -1,7 +1,7 @@
 # iPhone Tracker Project Plan
 
 **Status:** Canonical planning document  
-**Last updated:** 2026-07-11
+**Last updated:** 2026-07-12
 
 ## Purpose
 
@@ -144,6 +144,7 @@ The verified fix:
 - Synchronize layout height with the Visual Viewport API
 - Respect safe areas and raise/compact bottom overlays in landscape
 - Keep the hamburger aligned with the capped sidebar and handle `touchend`
+- Let both `touchend` and `click` satisfy pending iPhone Wake Lock acquisition
 - Trigger a Google Maps resize after rotation
 - Version static assets by modification time and disable caching for the HTML shell
 
@@ -225,6 +226,7 @@ Layers panel without making the panel wider.
 - 2026-03: Made Live Mode the default and improved mobile startup behavior
 - 2026-07: Added verified Live Tracking Diagnostics and iPhone landscape fixes
 - 2026-07: Improved Active Layers readability with larger statistics and a unique Live icon
+- 2026-07: Restored verified iPhone Screen Awake behavior after mobile touch handling changes
 
 ## Planning Workflow
 

@@ -37,6 +37,10 @@ var trackingDiagnosticTimer = null;
 var wakeLockActive = false;
 var wakeLock = null;
 
+function isMobileLiveViewport() {
+    return window.matchMedia('(max-width: 768px), (orientation: landscape) and (max-height: 500px) and (pointer: coarse)').matches;
+}
+
 // History navigation state
 var historyModeActive = false;      // Are we viewing history?
 var historyViewIndex = -1;          // Current view point index (-1 = live/latest)
@@ -1379,7 +1383,7 @@ function joinLiveSession() {
     var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) {
         awakeBtn.style.display = 'block';
-        if (window.matchMedia('(max-width: 768px)').matches && !wakeLockActive) enableKeepAwake();
+        if (isMobileLiveViewport() && !wakeLockActive) enableKeepAwake();
     }
 
     // Decide whether to animate: only if animation hasn't been shown yet this session
@@ -1472,7 +1476,7 @@ function resumeLiveSession() {
         var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) {
         awakeBtn.style.display = 'block';
-        if (window.matchMedia('(max-width: 768px)').matches && !wakeLockActive) enableKeepAwake();
+        if (isMobileLiveViewport() && !wakeLockActive) enableKeepAwake();
     }
 
         // Load existing track on map (with animation for first view after resume)
@@ -1661,7 +1665,7 @@ function startLiveMode() {
         var awakeBtn = document.getElementById('live-awake-btn');
     if (awakeBtn) {
         awakeBtn.style.display = 'block';
-        if (window.matchMedia('(max-width: 768px)').matches && !wakeLockActive) enableKeepAwake();
+        if (isMobileLiveViewport() && !wakeLockActive) enableKeepAwake();
     }
 
         // Start polling
@@ -1728,6 +1732,13 @@ function toggleKeepAwake() {
     }
 }
 
+function clearWakeLockGestureListener() {
+    if (!window._wakeLockGestureListener) return;
+    document.removeEventListener('click', window._wakeLockGestureListener);
+    document.removeEventListener('touchend', window._wakeLockGestureListener);
+    window._wakeLockGestureListener = null;
+}
+
 function enableKeepAwake() {
     if (!navigator.wakeLock) {
         console.log('[WakeLock] Wake Lock API not available');
@@ -1736,6 +1747,7 @@ function enableKeepAwake() {
     navigator.wakeLock.request('screen').then(function(lock) {
         wakeLock = lock;
         wakeLockActive = true;
+        clearWakeLockGestureListener();
         updateAwakeButton(true);
         console.log('[WakeLock] Native Wake Lock acquired');
         lock.addEventListener('release', function() {
@@ -1759,11 +1771,11 @@ function enableKeepAwake() {
             wakeLockActive = true;
             updateAwakeButton(true);
             window._wakeLockGestureListener = function() {
-                document.removeEventListener('click', window._wakeLockGestureListener);
-                window._wakeLockGestureListener = null;
+                clearWakeLockGestureListener();
                 if (wakeLockActive) enableKeepAwake();
             };
             document.addEventListener('click', window._wakeLockGestureListener);
+            document.addEventListener('touchend', window._wakeLockGestureListener, { passive: true });
             console.log('[WakeLock] Waiting for user gesture to acquire lock');
         }
     });
@@ -1776,10 +1788,7 @@ function disableKeepAwake() {
     // the lock, making it impossible to turn off.
     wakeLockActive = false;
     // Cancel pending gesture listener if lock was never actually acquired
-    if (window._wakeLockGestureListener) {
-        document.removeEventListener('click', window._wakeLockGestureListener);
-        window._wakeLockGestureListener = null;
-    }
+    clearWakeLockGestureListener();
     if (wakeLock) {
         wakeLock.release();
         wakeLock = null;
