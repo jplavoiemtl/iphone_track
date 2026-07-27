@@ -1,7 +1,7 @@
 # iPhone Tracker Project Plan
 
 **Status:** Canonical planning document  
-**Last updated:** 2026-07-12
+**Last updated:** 2026-07-27
 
 ## Purpose
 
@@ -227,6 +227,8 @@ Layers panel without making the panel wider.
 - 2026-07: Added verified Live Tracking Diagnostics and iPhone landscape fixes
 - 2026-07: Improved Active Layers readability with larger statistics and a unique Live icon
 - 2026-07: Restored verified iPhone Screen Awake behavior after mobile touch handling changes
+- 2026-07: Fixed multi-day activity detection by fetching OwnTracks data in chunks
+- 2026-07: Fixed map recentering during dense multi-day track playback
 
 ## Planning Workflow
 
