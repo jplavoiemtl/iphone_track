@@ -84,14 +84,21 @@ def detect_activities():
         return jsonify({"success": False, "error": "start_date and end_date are required"}), 400
 
     # Phase 1: Timezone discovery - broad fetch for the start date
-    discovery_data = fetch_owntracks_data(
+    discovery_data, upstream_status = fetch_owntracks_data(
         start_date, start_date, "00:00", "23:59",
         server_ip=config.OWNTRACKS_SERVER_IP,
         server_port=config.OWNTRACKS_SERVER_PORT,
         user=config.OWNTRACKS_USER,
         device_id=config.OWNTRACKS_DEVICE_ID,
-        default_timezone=config.DEFAULT_TIMEZONE
+        default_timezone=config.DEFAULT_TIMEZONE,
+        return_status=True
     )
+
+    if upstream_status == "unavailable":
+        return jsonify({
+            "success": False,
+            "error": "Could not reach the tracking server. Try a shorter date range."
+        }), 502
 
     if not discovery_data:
         return jsonify({"success": False, "error": f"No data found for {start_date}"}), 404
@@ -108,15 +115,22 @@ def detect_activities():
     tz_name = detected_tz.zone
 
     # Phase 2: Precise fetch with correct timezone
-    raw_data = fetch_owntracks_data(
+    raw_data, upstream_status = fetch_owntracks_data(
         start_date, end_date, start_time, end_time,
         server_ip=config.OWNTRACKS_SERVER_IP,
         server_port=config.OWNTRACKS_SERVER_PORT,
         user=config.OWNTRACKS_USER,
         device_id=config.OWNTRACKS_DEVICE_ID,
         target_timezone=detected_tz,
-        default_timezone=config.DEFAULT_TIMEZONE
+        default_timezone=config.DEFAULT_TIMEZONE,
+        return_status=True
     )
+
+    if upstream_status == "unavailable":
+        return jsonify({
+            "success": False,
+            "error": "Could not reach the tracking server. Try a shorter date range."
+        }), 502
 
     if not raw_data:
         return jsonify({

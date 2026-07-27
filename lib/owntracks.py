@@ -1,8 +1,13 @@
 import requests
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from lib.markers import read_activity_markers_file
+
+# The recorder needs roughly 5 seconds per day of data, so a wide range in a
+# single request runs past the timeout. Fetch in slices instead.
+CHUNK_DAYS = 3
+REQUEST_TIMEOUT = 60
 
 
 def fetch_owntracks_data(start_date_str, end_date_str, start_time="00:00", end_time="23:59",
@@ -23,33 +28,60 @@ def fetch_owntracks_data(start_date_str, end_date_str, start_time="00:00", end_t
         start_datetime = local_tz.localize(start_datetime)
         end_datetime = local_tz.localize(end_datetime)
 
-        start_utc = start_datetime.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        end_utc = end_datetime.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-
         all_data = []
-        upstream_status = "unavailable"
+        upstream_status = "available"
+        seen_points = set()
 
         locations_url = f"http://{server_ip}:{server_port}/api/0/locations"
-        locations_params = {
-            "user": user,
-            "device": device_id,
-            "from": start_utc,
-            "to": end_utc
-        }
 
-        try:
-            response = requests.get(locations_url, params=locations_params, timeout=30)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == 200 and isinstance(data.get("data"), list):
-                    all_data.extend(data["data"])
-                    upstream_status = "available"
-            if upstream_status == "unavailable":
-                print(f"[ERROR] OwnTracks returned HTTP {response.status_code}")
-        except requests.RequestException as e:
-            print(f"[ERROR] OwnTracks request failed: {str(e)}")
-        except (AttributeError, TypeError, ValueError) as e:
-            print(f"[ERROR] OwnTracks response was invalid: {str(e)}")
+        # Chunk boundaries overlap by design: a duplicated point is harmless
+        # (deduplicated below), a dropped one would not be.
+        chunk_start = start_datetime
+        while True:
+            chunk_end = min(chunk_start + timedelta(days=CHUNK_DAYS), end_datetime)
+            if chunk_end < chunk_start:
+                chunk_end = chunk_start
+            locations_params = {
+                "user": user,
+                "device": device_id,
+                "from": chunk_start.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "to": chunk_end.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            }
+
+            chunk_ok = False
+            try:
+                response = requests.get(locations_url, params=locations_params,
+                                        timeout=REQUEST_TIMEOUT)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == 200 and isinstance(data.get("data"), list):
+                        for item in data["data"]:
+                            key = (item.get("tst"), item.get("lat"), item.get("lon"))
+                            if key in seen_points:
+                                continue
+                            seen_points.add(key)
+                            all_data.append(item)
+                        chunk_ok = True
+                if not chunk_ok:
+                    print(f"[ERROR] OwnTracks returned HTTP {response.status_code}")
+            except requests.RequestException as e:
+                print(f"[ERROR] OwnTracks request failed: {str(e)}")
+            except (AttributeError, TypeError, ValueError) as e:
+                print(f"[ERROR] OwnTracks response was invalid: {str(e)}")
+
+            # A partial track is worse than a clear failure - stop here.
+            if not chunk_ok:
+                upstream_status = "unavailable"
+                break
+
+            if chunk_end >= end_datetime:
+                break
+            chunk_start = chunk_end
+
+        if upstream_status == "unavailable":
+            if return_status:
+                return None, upstream_status
+            return None
 
         lwt_data = read_activity_markers_file(start_datetime, end_datetime)
         if lwt_data:
