@@ -320,6 +320,10 @@ function addRideMarkers(activityType, ride, layer) {
 // ============================================================
 var ANIMATION_MS_PER_POINT = 200;
 var ANIMATION_MAX_TOTAL_MS = 60000;
+// Shortest tick the map can still follow. Below this the recentering falls
+// behind the drawing head, so dense tracks draw several segments per tick
+// instead of ticking faster.
+var ANIMATION_MIN_DELAY_MS = 40;
 
 // Animation state
 var animationTimer = null;
@@ -518,7 +522,6 @@ function _drawOneRichSegment() {
         tst: ride.points[i].tst
     });
 
-    if (!_suppressPan) map.panTo({ lat: ride.points[i].lat, lng: ride.points[i].lng });
     animationCurrentIdx++;
 }
 
@@ -552,12 +555,17 @@ function _drawOneBasicSegment() {
         tst: points[animationCurrentIdx].tst
     });
 
-    if (!_suppressPan) map.panTo({ lat: points[animationCurrentIdx].lat, lng: points[animationCurrentIdx].lng });
     animationCurrentIdx++;
 }
 
-// Suppress panTo during seek operations
-var _suppressPan = false;
+// Recenter on the newest drawn point. setCenter, not panTo: panTo eases over
+// several hundred ms and every call restarts that easing, so on dense tracks
+// the center never catches up with the drawing head.
+function _centerOnHead() {
+    if (animationDrawnSegments.length === 0) return;
+    var last = animationDrawnSegments[animationDrawnSegments.length - 1];
+    map.setCenter({ lat: last.lat, lng: last.lng });
+}
 
 function _clearAllDrawnSegments() {
     for (var i = 0; i < animationDrawnSegments.length; i++) {
@@ -581,8 +589,6 @@ function seekAnimation(targetIdx) {
     if (targetIdx < minIdx) targetIdx = minIdx;
     if (targetIdx > animationSegments.length) targetIdx = animationSegments.length;
 
-    _suppressPan = true;
-
     if (targetIdx < animationCurrentIdx) {
         _clearAllDrawnSegments();
     }
@@ -591,14 +597,7 @@ function seekAnimation(targetIdx) {
         _drawOneSegment();
     }
 
-    _suppressPan = false;
-
-    // Pan once to final position
-    if (animationDrawnSegments.length > 0) {
-        var last = animationDrawnSegments[animationDrawnSegments.length - 1];
-        map.panTo({ lat: last.lat, lng: last.lng });
-    }
-
+    _centerOnHead();
     _fireProgress();
 
     var slider = document.getElementById('animation-slider');
@@ -614,9 +613,23 @@ function seekAnimation(targetIdx) {
 // Callback for live stats updates during animation
 var onAnimationProgress = null;
 
-function _calcDelay(totalSegments) {
+// Returns { delayMs, stepsPerTick } for a track of totalSegments segments.
+// The total animation time stays the same; on dense tracks the extra speed
+// comes from drawing more segments per tick rather than from a shorter tick.
+function _calcPacing(totalSegments) {
+    if (!totalSegments) return { delayMs: ANIMATION_MIN_DELAY_MS, stepsPerTick: 1 };
+
     var totalMs = Math.min(totalSegments * ANIMATION_MS_PER_POINT, ANIMATION_MAX_TOTAL_MS);
-    return Math.max(Math.floor(totalMs / totalSegments), 10);
+    var perSegmentMs = totalMs / totalSegments;
+
+    if (perSegmentMs >= ANIMATION_MIN_DELAY_MS) {
+        return { delayMs: Math.floor(perSegmentMs), stepsPerTick: 1 };
+    }
+
+    return {
+        delayMs: ANIMATION_MIN_DELAY_MS,
+        stepsPerTick: Math.max(1, Math.round(ANIMATION_MIN_DELAY_MS / perSegmentMs))
+    };
 }
 
 // Haversine in JS for live distance tracking
@@ -671,7 +684,9 @@ function addRichLayerAnimated(activityType, ridesData, statsData, onComplete) {
         map.setZoom(15);
     }
 
-    var delayMs = _calcDelay(segments.length);
+    var pacing = _calcPacing(segments.length);
+    var delayMs = pacing.delayMs;
+    var stepsPerTick = pacing.stepsPerTick;
 
     // Store in module-level state for step controls
     animationMode = 'rich';
@@ -713,7 +728,10 @@ function addRichLayerAnimated(activityType, ridesData, statsData, onComplete) {
             return;
         }
 
-        _drawOneRichSegment();
+        for (var s = 0; s < stepsPerTick && animationCurrentIdx < segments.length; s++) {
+            _drawOneRichSegment();
+        }
+        _centerOnHead();
         _fireProgress();
         var _sl = document.getElementById('animation-slider');
         if (_sl) { _sl.max = segments.length; _sl.value = animationCurrentIdx; }
@@ -775,7 +793,9 @@ function addBasicLayerAnimated(activityType, points, stats, startTimeStr, endTim
     startMarker.addListener('click', function () { startInfo.open(map, startMarker); });
     layer.markers.push(startMarker);
 
-    var delayMs = _calcDelay(points.length);
+    var pacing = _calcPacing(points.length);
+    var delayMs = pacing.delayMs;
+    var stepsPerTick = pacing.stepsPerTick;
 
     // Store in module-level state for step controls
     animationMode = 'basic';
@@ -846,7 +866,10 @@ function addBasicLayerAnimated(activityType, points, stats, startTimeStr, endTim
             return;
         }
 
-        _drawOneBasicSegment();
+        for (var s = 0; s < stepsPerTick && animationCurrentIdx < points.length; s++) {
+            _drawOneBasicSegment();
+        }
+        _centerOnHead();
         _fireProgress();
         var _sl = document.getElementById('animation-slider');
         if (_sl) { _sl.max = points.length; _sl.value = animationCurrentIdx; }
