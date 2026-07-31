@@ -274,6 +274,78 @@ Known residual differences between the two modes, accepted for now:
 - The Live history panel is session-scoped, not ride-scoped. A session
   containing more than one activity shows a session total there.
 
+**Verified end to end on 2026-07-31.** A controlled ride recorded with the Live
+session started before departure produced identical figures in both modes: same
+point count, same distance, same duration to the second, same average speed.
+Marker lead measured across three car trips that day was consistently 42 to 45
+seconds at the start, and the end marker trailed the last GPS fix by just under
+the vehicle trigger's 240-second timeout.
+
+## Open Questions
+
+### A live session can be replaced instead of resumed
+
+**Observed:** 2026-07-31. **Status:** not reproduced under controlled conditions.
+
+A live session was replaced by a new one at the moment the app was opened on a
+phone. The user took no reset action and saw no prompt. The session's start
+timestamp was rewritten to that moment, discarding everything accumulated
+before it.
+
+The durable finding behind it is an asymmetry between two endpoints facing the
+same situation, a saved session on disk with an empty in-memory cache:
+
+| Endpoint | Behaviour |
+| --- | --- |
+| `/api/live/poll` | auto-recovers, keeping the original start timestamp |
+| `/api/live/start` | discards the saved session and starts fresh from now |
+
+`live_start` resumes only when the caller passes `resume: true`. Both
+`joinLiveSession()` and `startLiveMode()` post an empty body, so the backend
+cannot distinguish a rejoin from a deliberate fresh start, and the fallback is
+the destructive branch.
+
+Two things keep this rare. The in-memory cache is emptied only by a worker
+restart, and any client that is polling repairs the session through
+`/api/live/poll` within one poll interval, usually before another client calls
+`/api/live/start`. That is the likely reason the resume prompt is almost never
+seen in practice.
+
+A contributing hazard: the resume prompt uses `confirm()`, and a browser that
+suppresses the dialog returns false, which is wired to the destructive branch.
+The Reset to Now prompt has the opposite polarity, where a suppressed dialog
+does nothing.
+
+**What the container logs establish.** On the day of the incident the only
+worker restarts were the six caused by a deployment, within a single 30-second
+window, and no `AUTO-RECOVERING` line appears anywhere that day. The in-memory
+cache was therefore empty continuously from that deployment until the session
+was replaced, several hours later. Two explanations remain, and the logs cannot
+separate them because gunicorn runs without `--access-logfile` and so records no
+request line: either the app replaced the session on page load, or the user
+pressed Reset to Now at that moment. Enabling access logging would make any
+future occurrence unambiguous.
+
+**Reproduction to try:** start a live session; restart the worker, for which
+touching any source file the app imports is enough; ensure no client polls in
+between; then open the app on another device and check whether the session
+start timestamp is preserved. Confirmed *not* to occur when the cache is warm:
+a controlled test on 2026-07-31 with a warm cache joined the existing session
+and preserved its start timestamp, and both modes then agreed exactly.
+
+**Fix if confirmed:** make `live_start` resume whenever saved state exists and
+no explicit reset was requested, so discarding a session always requires a
+positive signal; have `joinLiveSession()` state its intent explicitly; invert
+the stale-session prompt so that a suppressed dialog takes the safe branch.
+
+### The push worker does not pick up code changes
+
+Only the web container runs with auto-reload. The push worker container loads
+its modules once at start, so changes to `lib/notifications.py` and anything
+else it imports take effect only when that container is restarted. After the
+2026-07-31 statistics change, the worker kept sending notifications computed
+with the previous formula until it was restarted.
+
 ## Completed Milestones
 
 - 2026-02: Converted the original tracker into a Flask web application
