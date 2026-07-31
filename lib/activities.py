@@ -217,6 +217,28 @@ def create_other_activity_rides(other_points, car_bike_activities):
         return [], 0
 
 
+def ride_stat_window(ride):
+    """Return the (start, end) timestamps a ride's stats should be measured over.
+
+    Distance comes from GPS points, so duration and average speed are only
+    meaningful over the interval those points actually cover. This intersects
+    the ride's declared window with the span of its points, which resolves
+    correctly for every activity type:
+
+    - car/bike: 'start'/'end' are external marker times that bracket the GPS
+      track (the markers come from a motion sensor and the car's own tracker,
+      not from the phone), so this clamps in to the first and last fix.
+    - other: 'start'/'end' are already trimmed to movement boundaries while
+      'points' keeps the stationary head and tail, so this clamps in to the
+      movement boundaries.
+    """
+    points = ride.get('points')
+    if not points:
+        return ride['start'], ride['end']
+    return (max(ride['start'], points[0]['tst']),
+            min(ride['end'], points[-1]['tst']))
+
+
 def calculate_activity_stats(activities):
     stats = {}
     try:
@@ -233,7 +255,8 @@ def calculate_activity_stats(activities):
             for activity in activity_data:
                 points = activity['points']
                 activity_distance = calculate_track_distance(points)
-                activity_duration = (points[-1]['tst'] if points else activity['end']) - activity['start']
+                stat_start, stat_end = ride_stat_window(activity)
+                activity_duration = stat_end - stat_start
 
                 total_distance += activity_distance
                 total_duration += activity_duration

@@ -9,7 +9,7 @@ from datetime import datetime
 import config
 from lib.geo import get_timezone_from_gps, calculate_track_distance, format_time
 from lib.owntracks import fetch_owntracks_data
-from lib.activities import parse_activities, calculate_activity_stats
+from lib.activities import parse_activities, calculate_activity_stats, ride_stat_window
 from lib.live import save_live_state, load_live_state, clear_live_state
 
 app = Flask(__name__)
@@ -179,8 +179,7 @@ def detect_activities():
             for ride_idx, ride in enumerate(activities[activity_type]):
                 if not ride['points']:
                     continue
-                start_timestamp = ride['start']
-                end_timestamp = ride['points'][-1]['tst'] if ride['points'] else ride['end']
+                start_timestamp, end_timestamp = ride_stat_window(ride)
                 start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
                 end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
 
@@ -270,8 +269,7 @@ def get_track_data(activity_type):
             continue
 
         color = colors[ride_idx % len(colors)]
-        start_timestamp = ride['start']
-        end_timestamp = ride['points'][-1]['tst'] if ride['points'] else ride['end']
+        start_timestamp, end_timestamp = ride_stat_window(ride)
 
         start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
         end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
@@ -385,12 +383,12 @@ def save_map():
             for ride_idx, ride in enumerate(activities[layer_type]):
                 if not ride['points']:
                     continue
-                gps_end = ride['points'][-1]['tst'] if ride['points'] else ride['end']
-                s_local = datetime.fromtimestamp(ride['start'], tz=pytz.UTC).astimezone(detected_tz)
-                e_local = datetime.fromtimestamp(gps_end, tz=pytz.UTC).astimezone(detected_tz)
+                stat_start, stat_end = ride_stat_window(ride)
+                s_local = datetime.fromtimestamp(stat_start, tz=pytz.UTC).astimezone(detected_tz)
+                e_local = datetime.fromtimestamp(stat_end, tz=pytz.UTC).astimezone(detected_tz)
                 saved_rides_data[layer_type].append({
-                    'start': ride['start'],
-                    'end': gps_end,
+                    'start': stat_start,
+                    'end': stat_end,
                     'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in ride['points']],
                     'start_time_str': s_local.strftime('%b %d, %H:%M:%S'),
                     'end_time_str': e_local.strftime('%b %d, %H:%M:%S'),
@@ -1060,8 +1058,7 @@ def get_live_track_data(activity_type):
             continue
 
         color = colors[ride_idx % len(colors)]
-        start_timestamp = ride['start']
-        end_timestamp = ride['points'][-1]['tst'] if ride['points'] else ride['end']
+        start_timestamp, end_timestamp = ride_stat_window(ride)
 
         start_local = datetime.fromtimestamp(start_timestamp, tz=pytz.UTC).astimezone(detected_tz)
         end_local = datetime.fromtimestamp(end_timestamp, tz=pytz.UTC).astimezone(detected_tz)
@@ -1189,12 +1186,12 @@ def live_save_map():
             for ride_idx, ride in enumerate(activities[layer_type]):
                 if not ride['points']:
                     continue
-                gps_end = ride['points'][-1]['tst'] if ride['points'] else ride['end']
-                s_local = datetime.fromtimestamp(ride['start'], tz=pytz.UTC).astimezone(detected_tz)
-                e_local = datetime.fromtimestamp(gps_end, tz=pytz.UTC).astimezone(detected_tz)
+                stat_start, stat_end = ride_stat_window(ride)
+                s_local = datetime.fromtimestamp(stat_start, tz=pytz.UTC).astimezone(detected_tz)
+                e_local = datetime.fromtimestamp(stat_end, tz=pytz.UTC).astimezone(detected_tz)
                 saved_rides_data[layer_type].append({
-                    'start': ride['start'],
-                    'end': gps_end,
+                    'start': stat_start,
+                    'end': stat_end,
                     'points': [{'lat': p['lat'], 'lng': p['lon'], 'tst': p['tst']} for p in ride['points']],
                     'start_time_str': s_local.strftime('%b %d, %H:%M:%S'),
                     'end_time_str': e_local.strftime('%b %d, %H:%M:%S'),

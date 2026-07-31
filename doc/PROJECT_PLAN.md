@@ -1,7 +1,7 @@
 # iPhone Tracker Project Plan
 
 **Status:** Canonical planning document  
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-31
 
 ## Purpose
 
@@ -215,6 +215,65 @@ Layers panel without making the panel wider.
 6. Long statistics remain on one line without overlapping Hide/Show controls.
 7. The layout remains usable in iPhone portrait and landscape modes.
 
+## Technical Decisions
+
+### Ride statistics are measured over the GPS point span
+
+**Decided:** 2026-07-31
+
+A ride's distance is computed entirely from GPS fixes, so its duration and
+average speed are only meaningful over the interval those fixes cover. Every
+ride therefore reports statistics over a **stat window**: the intersection of
+the ride's declared window with the span of its GPS points, produced by
+`ride_stat_window()` in `lib/activities.py`.
+
+This matters because `ride['start']` and `ride['end']` mean different things
+per activity type:
+
+| Type | Declared window | GPS points | Intersection resolves to |
+| --- | --- | --- | --- |
+| car, bike | External marker times, wider than the track | Filtered to the marker window | First and last fix |
+| other | Movement boundaries, narrower than the track | Untrimmed, keeps stationary head and tail | The movement boundaries |
+
+Car and bike markers do not come from the phone being tracked. Bike markers are
+emitted by a motion classifier with activity/inactivity confirmation delays, and
+car markers are driven by the vehicle's own GPS unit through a 240-second
+inactivity trigger. Both bracket the phone's track on either side, so a ride
+measured from marker to marker mixes two independent clocks and consistently
+inflates duration while deflating average speed. Observed marker lead on car
+trips is roughly 45 seconds at the start; on a bike ride it reached 2m38s.
+
+Walking rides have no markers. `find_movement_boundaries()` already trims
+`ride['start']` and `ride['end']` back to real movement, but `ride['points']`
+deliberately keeps the stationary head and tail because walking end detection
+depends on them. Measuring to `points[-1]` therefore re-added a stationary tail
+of up to the 30-minute ride-split threshold; one real walk was reported as 37
+minutes instead of 6.
+
+Consequences of this convention:
+
+- Date/time mode and Live mode report identical figures for the same ride. They
+  previously disagreed because the Live history panel already measured fix to
+  fix while date/time mode measured from the marker.
+- Ride segmentation is unaffected. Declared windows still assign points to
+  rides, and the minimum-duration and minimum-point filters are unchanged.
+- `ride['points']` is never trimmed, so walking start/end detection in
+  `lib/notifications.py` keeps working.
+- The activity timeline keeps raw marker timestamps. It is an event log, not a
+  statistic.
+
+Related history: a 2026-03 change moved the ride **end** off the marker and onto
+the last GPS fix for the same reason, but left the start on the marker and did
+not account for the walking case. This decision completes that work and is
+recorded here because the earlier rationale survived only in a commit message.
+
+Known residual differences between the two modes, accepted for now:
+
+- A Live session started mid-ride holds fewer points than a later date/time
+  query, so distance itself can differ for that ride.
+- The Live history panel is session-scoped, not ride-scoped. A session
+  containing more than one activity shows a session total there.
+
 ## Completed Milestones
 
 - 2026-02: Converted the original tracker into a Flask web application
@@ -229,6 +288,7 @@ Layers panel without making the panel wider.
 - 2026-07: Restored verified iPhone Screen Awake behavior after mobile touch handling changes
 - 2026-07: Fixed multi-day activity detection by fetching OwnTracks data in chunks
 - 2026-07: Fixed map recentering during dense multi-day track playback
+- 2026-07: Reconciled Live and date/time ride statistics on a shared GPS stat window
 
 ## Planning Workflow
 
