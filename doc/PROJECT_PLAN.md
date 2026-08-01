@@ -324,6 +324,93 @@ Notes for whoever renews it:
 - The server certificate expires in November 2028. Renewal is a server-side
   reissue plus a container restart; devices are unaffected.
 
+## Runbooks
+
+### The app stops loading with a certificate error on every device at once
+
+Almost certainly the server certificate has expired. It is valid until
+**November 2028**. Renewal is deliberately not automated: the failure is loud,
+self-announcing, and costs nothing while it waits, so it is fixed on demand
+rather than guarded by a scheduled job.
+
+**Nothing needs to be done on any phone or computer.** Devices trust the CA, not
+the server certificate, and the CA is valid until 2036. Reissuing from the same
+CA is accepted immediately.
+
+**Prerequisite:** shell access to the application host as a user who can `sudo`,
+plus the ability to restart the web container. Connection details are
+deliberately not recorded in this file, which is tracked in a public repository.
+
+Confirm the diagnosis first:
+
+```
+openssl x509 -in <APP_DIR>/certs/cert.pem -noout -subject -issuer -enddate
+```
+
+Then, on the host, as root. Substitute the two DNS names and the address the
+devices actually use; they must match the previous certificate exactly:
+
+```
+CA=<CA_DIR>                 # holds ca.key and ca.crt, outside the shared tree
+APP=<APP_DIR>/certs
+S=$(mktemp -d)
+
+openssl genrsa -out "$S/server.key" 2048
+openssl req -new -key "$S/server.key" -subj "/CN=<HOST_DNS>" -out "$S/server.csr"
+
+cat > "$S/ext.cnf" <<'EOF'
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=DNS:<HOST_DNS>,DNS:<HOST_DNS_ALT>,IP:<HOST_IP>
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+EOF
+
+openssl x509 -req -in "$S/server.csr" -CA "$CA/ca.crt" -CAkey "$CA/ca.key" \
+  -CAcreateserial -days 825 -sha256 -extfile "$S/ext.cnf" -out "$S/server.crt"
+
+openssl verify -CAfile "$CA/ca.crt" "$S/server.crt"      # must print: OK
+
+cp "$S/server.crt" "$APP/cert.pem"
+cp "$S/server.key" "$APP/key.pem"
+chown root:root "$APP/cert.pem" "$APP/key.pem"
+chmod 644 "$APP/cert.pem"
+chmod 600 "$APP/key.pem"
+rm -rf "$S"
+
+docker restart <WEB_CONTAINER>
+```
+
+Verify, then reload the app on a device:
+
+```
+openssl s_client -connect <HOST>:5000 </dev/null 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates
+```
+
+Notes:
+
+- The SAN list must cover every name and address used to reach the app. A name
+  missing here produces a certificate error on exactly the devices that use it.
+- `key.pem` must end up mode 600 and owned by root. The web container runs as
+  root and can still read it; the file share cannot. Leaving it world-readable
+  reintroduces the problem this design exists to prevent.
+- The restart clears the in-memory live session. The saved session survives, so
+  the next page load offers to resume it.
+- A command-line tool may still refuse the new certificate over unknown
+  revocation. That is expected for a private CA and does not indicate a bad
+  chain; see the TLS decision above.
+
+### The CA certificate expires (2036)
+
+A different and larger job. Generating a new CA means the new server certificate
+no longer chains to anything the devices trust, so **every device must install
+and trust the new CA** before it will connect. Plan for hands-on time with each
+phone and computer, and keep the old CA in place until every device has been
+migrated. The original CA and server certificates were created on 2026-07-31;
+the commands used are recoverable from the repository history.
+
 ## Known Issues
 
 ### Discarding a live session is the default answer to a dismissed prompt
