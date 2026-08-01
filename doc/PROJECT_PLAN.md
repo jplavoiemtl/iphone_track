@@ -281,16 +281,28 @@ Marker lead measured across three car trips that day was consistently 42 to 45
 seconds at the start, and the end marker trailed the last GPS fix by just under
 the vehicle trigger's 240-second timeout.
 
-## Open Questions
+## Known Issues
 
-### A live session can be replaced instead of resumed
+### Discarding a live session is the default answer to a dismissed prompt
 
-**Observed:** 2026-07-31. **Status:** not reproduced under controlled conditions.
+**Observed:** 2026-07-31. **Status:** the destructive default is confirmed by
+inspection and by testing. The incident that prompted the investigation remains
+unexplained, but the app is not silently discarding sessions.
 
 A live session was replaced by a new one at the moment the app was opened on a
-phone. The user took no reset action and saw no prompt. The session's start
-timestamp was rewritten to that moment, discarding everything accumulated
-before it.
+phone, its start timestamp rewritten and everything accumulated before it
+discarded. The user recalled taking no reset action and seeing no prompt.
+
+**What controlled testing showed.** Two tests were run the same day. With a warm
+in-memory cache, opening the app on a second device joined the existing session
+and preserved it, and both display modes then agreed exactly. With the cache
+deliberately emptied by a worker reload and no client polling in between,
+opening the app on the phone **did** present the resume prompt, and choosing to
+resume restored the session intact, including every accumulated point. So the
+destructive branch is not reachable without either dismissing that prompt or
+pressing Reset to Now. The remaining explanations for the original incident are
+a reflexively dismissed prompt or an unremembered reset, neither of which can be
+distinguished after the fact.
 
 The durable finding behind it is an asymmetry between two endpoints facing the
 same situation, a saved session on disk with an empty in-memory cache:
@@ -311,10 +323,12 @@ restart, and any client that is polling repairs the session through
 `/api/live/start`. That is the likely reason the resume prompt is almost never
 seen in practice.
 
-A contributing hazard: the resume prompt uses `confirm()`, and a browser that
-suppresses the dialog returns false, which is wired to the destructive branch.
-The Reset to Now prompt has the opposite polarity, where a suppressed dialog
-does nothing.
+The core hazard is the prompt's polarity. It asks whether to resume, so the
+answer that **discards** the session is the one a user taps to make a popup go
+away, and a browser that suppresses the dialog returns the same value. The Reset
+to Now prompt is the opposite way round: a dismissed dialog there does nothing.
+A prompt whose safe answer is "confirm" and whose destructive answer is
+"dismiss" is backwards regardless of how the original incident is explained.
 
 **What the container logs establish.** On the day of the incident the only
 worker restarts were the six caused by a deployment, within a single 30-second
@@ -326,17 +340,27 @@ request line: either the app replaced the session on page load, or the user
 pressed Reset to Now at that moment. Enabling access logging would make any
 future occurrence unambiguous.
 
-**Reproduction to try:** start a live session; restart the worker, for which
-touching any source file the app imports is enough; ensure no client polls in
-between; then open the app on another device and check whether the session
-start timestamp is preserved. Confirmed *not* to occur when the cache is warm:
-a controlled test on 2026-07-31 with a warm cache joined the existing session
-and preserved its start timestamp, and both modes then agreed exactly.
+**Reproduction:** start a live session; restart the worker, for which touching
+any source file the app imports is enough; ensure no client polls in between;
+then open the app on another device. The resume prompt appears, and resuming
+preserves the session.
 
-**Fix if confirmed:** make `live_start` resume whenever saved state exists and
-no explicit reset was requested, so discarding a session always requires a
-positive signal; have `joinLiveSession()` state its intent explicitly; invert
-the stale-session prompt so that a suppressed dialog takes the safe branch.
+**Recommended fix.** Remove the choice rather than re-word it: resume a
+non-stale session automatically instead of prompting. Reset to Now already
+exists for discarding one deliberately and carries its own correctly-polarised
+confirmation, so the prompt asks a question the user has already been given a
+better way to answer. This is a small frontend change and is sufficient on its
+own.
+
+An earlier, broader proposal to restructure `live_start` and to have
+`joinLiveSession()` declare its intent is **not** needed: testing showed those
+paths behave correctly. The backend fallback is still destructive for a caller
+that passes neither flag, so making it resume instead remains a cheap
+belt-and-braces improvement, but it is no longer load-bearing.
+
+**Worth doing regardless:** gunicorn runs without `--access-logfile`, so there
+is no record of which request replaced a session. Adding it would make any
+future occurrence unambiguous and cost nothing.
 
 ### The push worker does not pick up code changes
 
@@ -345,6 +369,14 @@ its modules once at start, so changes to `lib/notifications.py` and anything
 else it imports take effect only when that container is restarted. After the
 2026-07-31 statistics change, the worker kept sending notifications computed
 with the previous formula until it was restarted.
+
+### Repeated TLS handshake failures in the web container log
+
+A client that does not trust the self-signed certificate retries roughly every
+70 seconds and fails the handshake, logging a stack trace each time. It
+continues with every known browser closed, so it is not the app's own frontend.
+Harmless but noisy, and it makes the log harder to read during an
+investigation. Source not yet identified.
 
 ## Completed Milestones
 
