@@ -281,6 +281,49 @@ Marker lead measured across three car trips that day was consistently 42 to 45
 seconds at the start, and the end marker trailed the last GPS fix by just under
 the vehicle trigger's 240-second timeout.
 
+### TLS uses a private CA whose signing key is kept off the shared tree
+
+**Decided:** 2026-07-31
+
+The application is served over HTTPS so that the browser Wake Lock API is
+available. Its certificate was originally a long-lived, self-signed **CA**
+certificate whose private key sat inside the bind-mounted source tree and was
+world-readable over the file share. No client could verify it, so browsers
+relied on click-through exceptions while their speculative preconnect sockets
+failed the handshake continuously and filled the container log with stack
+traces.
+
+Two properties made that certificate unsafe to fix by simply trusting it: it was
+a CA, so anything signed with it would be trusted for *any* host name, and its
+key was readable by anyone who could reach the file share.
+
+The current arrangement:
+
+- A private CA lives outside the shared tree in a root-owned directory, with the
+  key at mode 600. Nothing reachable over the file share can sign with it.
+- The CA carries `pathlen:0` and a critical `nameConstraints` extension limiting
+  it to the application host's two DNS names and its single address.
+- The server certificate is a separate 825-day leaf, `CA:FALSE`, `serverAuth`
+  only, with the host names in `subjectAltName`.
+- Devices install and trust **only the CA certificate**, so reissuing the server
+  certificate needs no change on any device.
+
+Notes for whoever renews it:
+
+- iOS offers its "Certificate Trust Settings" toggle only for **root CA**
+  certificates. A self-signed leaf can be installed but never trusted, so the CA
+  layer is required for iPhone support even though a bare leaf is sufficient on
+  Windows. This is not obvious and cost an extra round trip to discover.
+- Apple's 398-day certificate lifetime limit does not apply to certificates
+  issued by user-added root CAs, so an 825-day server certificate is accepted
+  and yearly renewals are not required.
+- A private CA publishes no CRL. Browsers soft-fail unknown revocation for
+  locally installed roots, but some command-line tools treat it as fatal and
+  need an explicit flag to skip the check. A tool failing this way does not
+  indicate a broken chain.
+- The server certificate expires in November 2028. Renewal is a server-side
+  reissue plus a container restart; devices are unaffected.
+
 ## Known Issues
 
 ### Discarding a live session is the default answer to a dismissed prompt
@@ -370,14 +413,6 @@ else it imports take effect only when that container is restarted. After the
 2026-07-31 statistics change, the worker kept sending notifications computed
 with the previous formula until it was restarted.
 
-### Repeated TLS handshake failures in the web container log
-
-A client that does not trust the self-signed certificate retries roughly every
-70 seconds and fails the handshake, logging a stack trace each time. It
-continues with every known browser closed, so it is not the app's own frontend.
-Harmless but noisy, and it makes the log harder to read during an
-investigation. Source not yet identified.
-
 ## Completed Milestones
 
 - 2026-02: Converted the original tracker into a Flask web application
@@ -393,6 +428,7 @@ investigation. Source not yet identified.
 - 2026-07: Fixed multi-day activity detection by fetching OwnTracks data in chunks
 - 2026-07: Fixed map recentering during dense multi-day track playback
 - 2026-07: Reconciled Live and date/time ride statistics on a shared GPS stat window
+- 2026-07: Replaced the exposed self-signed TLS certificate with a name-constrained private CA
 
 ## Planning Workflow
 
