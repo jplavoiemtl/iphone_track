@@ -768,9 +768,9 @@ function generateTrackImage(tracks, statsObj, filename) {
         }
     }
 
-    // Add 15% padding so track doesn't touch edges
-    var latPad = Math.max((maxLat - minLat) * 0.15, 0.001);
-    var lngPad = Math.max((maxLng - minLng) * 0.15, 0.001);
+    // Add 5% padding so track doesn't touch edges
+    var latPad = Math.max((maxLat - minLat) * 0.05, 0.001);
+    var lngPad = Math.max((maxLng - minLng) * 0.05, 0.001);
     minLat -= latPad; maxLat += latPad;
     minLng -= lngPad; maxLng += lngPad;
 
