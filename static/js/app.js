@@ -781,16 +781,32 @@ function generateTrackImage(tracks, statsObj, filename) {
         return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * (1 << z);
     }
 
-    // Find highest zoom where padded bbox fits in drawing area
-    var zoom = 1;
+    // Find highest integer zoom where padded bbox fits in drawing area
+    var fitZoom = 1;
     for (var z = 20; z >= 1; z--) {
         var pxW = (lngToTileX(maxLng, z) - lngToTileX(minLng, z)) * 256;
         var pxH = (latToTileY(minLat, z) - latToTileY(maxLat, z)) * 256;
-        if (pxW <= drawW && pxH <= drawH) { zoom = z; break; }
+        if (pxW <= drawW && pxH <= drawH) { fitZoom = z; break; }
     }
 
-    // World pixel coordinates at chosen zoom
-    var worldSize = 256 * (1 << zoom);
+    // Integer zoom levels step by 2x, so the bbox can end up filling as little as
+    // half the frame. Measure the leftover slack and spend it by drawing tiles
+    // larger or smaller than their nominal 256px, which gives a continuous scale.
+    var fitPxW = (lngToTileX(maxLng, fitZoom) - lngToTileX(minLng, fitZoom)) * 256;
+    var fitPxH = (latToTileY(minLat, fitZoom) - latToTileY(maxLat, fitZoom)) * 256;
+    var scale = Math.min(drawW / fitPxW, drawH / fitPxH);
+
+    // Split the ideal fractional zoom into a tile level to fetch and a residual
+    // draw scale. Rounding keeps tileScale near 1 (~0.71-1.41) so road widths and
+    // label sizes stay close to the basemap's intended proportions. Tiles are @2x,
+    // so drawing them up to 2x their nominal size still downsamples native pixels.
+    var fractionalZoom = fitZoom + Math.log(scale) / Math.LN2;
+    var tileZoom = Math.max(0, Math.min(20, Math.round(fractionalZoom)));
+    var tileScale = Math.pow(2, fractionalZoom - tileZoom);
+    var tilePx = 256 * tileScale;
+
+    // World pixel coordinates at the chosen tile level and draw scale
+    var worldSize = tilePx * (1 << tileZoom);
     function lngToPx(lng) { return (lng + 180) / 360 * worldSize; }
     function latToPx(lat) {
         var r = lat * Math.PI / 180;
@@ -810,8 +826,8 @@ function generateTrackImage(tracks, statsObj, filename) {
     // Determine which tiles cover the full drawing area (not just bbox)
     var wpxCanvasLeft = drawX - offX, wpxCanvasRight = drawX + drawW - offX;
     var wpxCanvasTop = drawY - offY, wpxCanvasBottom = drawY + drawH - offY;
-    var txMin = Math.floor(wpxCanvasLeft / 256), txMax = Math.floor(wpxCanvasRight / 256);
-    var tyMin = Math.floor(wpxCanvasTop / 256), tyMax = Math.floor(wpxCanvasBottom / 256);
+    var txMin = Math.floor(wpxCanvasLeft / tilePx), txMax = Math.floor(wpxCanvasRight / tilePx);
+    var tyMin = Math.floor(wpxCanvasTop / tilePx), tyMax = Math.floor(wpxCanvasBottom / tilePx);
 
     // Load dark basemap tiles, then draw everything
     var tileImages = [];
@@ -840,7 +856,7 @@ function generateTrackImage(tracks, statsObj, filename) {
         for (var i = 0; i < tileImages.length; i++) {
             var ti = tileImages[i];
             if (ti.img.naturalWidth > 0) {
-                ctx.drawImage(ti.img, offX + ti.tx * 256, offY + ti.ty * 256, 256, 256);
+                ctx.drawImage(ti.img, offX + ti.tx * tilePx, offY + ti.ty * tilePx, tilePx, tilePx);
             }
         }
         // Color-burn darkens mid-tones/highlights while preserving shadows and contrast
@@ -1064,7 +1080,7 @@ function generateTrackImage(tracks, statsObj, filename) {
                 loaded++;
                 if (loaded >= total) drawCanvas();
             };
-            img.src = 'https://' + s + '.basemaps.cartocdn.com/rastertiles/voyager/' + zoom + '/' + tx + '/' + ty + '@2x.png';
+            img.src = 'https://' + s + '.basemaps.cartocdn.com/rastertiles/voyager/' + tileZoom + '/' + tx + '/' + ty + '@2x.png';
         }
     }
 }
