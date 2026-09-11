@@ -1,7 +1,7 @@
 # iPhone Tracker Project Plan
 
 **Status:** Canonical planning document  
-**Last updated:** 2026-07-31
+**Last updated:** 2026-09-11
 
 ## Purpose
 
@@ -42,8 +42,6 @@ The application currently includes:
 
 ## Active Work
 
-No feature is currently marked as active.
-
 When starting work, add one item here with:
 
 - Goal and user benefit
@@ -54,6 +52,93 @@ When starting work, add one item here with:
 - Status: Planned, In progress, Blocked, or Ready for review
 
 Only one major feature should normally be active at a time.
+
+### Verify the OwnTracks timer-restart mitigation
+
+**Status:** In progress, started 2026-09-11
+
+#### Goal and User Benefit
+
+Confirm that turning off Background App Refresh for OwnTracks stops the skipped
+one-minute reports that cut corners in ride tracks and understate distance and
+average speed. The analysis is under Known Issues, "Ride tracks occasionally skip
+a one-minute GPS report".
+
+#### Change Applied
+
+On 2026-09-11, iOS Settings > General > Background App Refresh > OwnTracks was
+turned off. No application code or server configuration was changed.
+
+#### Scope and Non-Goals
+
+- Observation only. Keep `locatorInterval` at 60 seconds and change no code, so
+  the before and after figures compare like for like.
+- The MQTT and polling findings recorded with the Known Issue are separate
+  follow-ups.
+
+#### Method
+
+`doc/gps_timer_restarts.ps1` is a local, untracked, read-only script. For a date
+range it reads the Recorder's points and the activity markers, and assigns points
+to car and bike rides using the same rules as `parse_activities()`. It then
+counts timer restarts and track holes per activity, per ride, and by charging
+state. Run it with `-Since 2026-09-12 -PerRide`.
+
+- Car rides make a weak test. The phone charges in the car, so their baseline is
+  already 0.3 restarts per 100 intervals. They show whether anything got worse,
+  not whether the fix works.
+- Bike rides and any other time on battery make the real test. Ordinary days
+  count too: on battery the baseline is 5.2 per 100 intervals whether or not the
+  phone is moving, about seven restarts a day.
+
+#### Bench Test, 2026-09-11
+
+A paired test run at home on battery, on cellular with Wi-Fi switched off in
+Settings, in move mode, with the Live map open in the browser as on a ride, and
+with OwnTracks itself never brought to the foreground.
+
+| Session | Background App Refresh | Length | Timer restarts | Reports lost |
+| --- | --- | --- | --- | --- |
+| 14:27-15:30 | On | 63 min | 5 | 5 |
+| 16:02-17:42 | Off | 100 min | 0 | 0 |
+
+The restarts in the first session fell 7.5 to 8.5 minutes apart, matching the 8
+to 9 minute cadence seen across the 30-day history, and each one moved the
+one-minute rhythm to new seconds. The second session recorded 98 reports in 100
+minutes with no interval other than 60 seconds, and it was the harder test: the
+Live map was open throughout rather than for part of the hour, and it included
+two car rides, 38 of its intervals being on the move. At the first session's
+rate, a clean 100 minutes would happen by chance less than once in a thousand
+tries, so Background App Refresh is confirmed as the cause under these
+conditions. The multi-day and bike-ride criteria below still stand.
+
+Intervals are measured from the moment the timer rang, which a report carrying an
+older fix records in `created_at`, rather than from the fix timestamp. Two
+apparent restarts in the first session were this artifact and are not counted.
+The 30-day baseline was rechecked under the corrected rule and is unchanged: 0.3
+restarts per 100 intervals on car rides and 4.4 on bike rides.
+
+Separately, two blocks of reports went missing that afternoon with the setting
+already off: seven around 15:31 and three around 16:00, the latter as the phone
+was unplugged at the end of a drive. Both happened while the phone was stopped,
+so neither damaged a moving track, but blocks of missing reports are a different
+failure from a single restart and are worth watching during the observation
+period.
+
+#### Acceptance Criteria
+
+1. Over at least three days that include normal time on battery, restarts on
+   battery fall from 5.2 per 100 intervals to at most 1 (the charging baseline is
+   0.5).
+2. At least three bike rides have no track holes (baseline: 16 holes over 15
+   rides).
+3. Car rides show no increase in restarts or holes (baseline: 0.3 per 100 and 2
+   holes over 149 rides).
+4. The Live map keeps updating during rides, and reports held on the phone
+   through a coverage gap still arrive and fill in the track.
+
+If criterion 1 fails, something else is restarting the timer; move on to the
+fallbacks listed with the Known Issue.
 
 ## Prioritized Backlog
 
@@ -491,6 +576,92 @@ belt-and-braces improvement, but it is no longer load-bearing.
 **Worth doing regardless:** gunicorn runs without `--access-logfile`, so there
 is no record of which request replaced a session. Adding it would make any
 future occurrence unambiguous and cost nothing.
+
+### Ride tracks occasionally skip a one-minute GPS report
+
+**Observed:** reported 2026-09-11. **Status:** traced to the OwnTracks iOS app,
+not the network. A phone-side mitigation was applied on 2026-09-11 and is under
+observation; see Active Work.
+
+During a ride the phone reports once a minute, but now and then one report is
+missing. When the missing report falls in a turn, the straight segment between
+the surviving points cuts the corner, and the ride's distance and average speed
+both come out low. The suspected cause was cellular interference on the MQTT
+connection.
+
+**It is not a delivery loss.** Measured on Recorder data from 2026-08-12 to
+2026-09-11:
+
+- Normal spacing is 60 seconds, with 95% of reports within 62 seconds.
+- In the two weeks examined point by point, every one-report hole while moving
+  was 100 to 118 seconds long. A report that was produced and then lost would
+  leave a hole of at least 120 seconds, because the surviving reports keep the
+  one-minute rhythm. A shorter hole means the rhythm itself moved: the phone
+  never produced that report.
+- After each hole the reports settle into a new, steady one-minute rhythm with
+  no short catch-up interval. A timer that merely fired late would snap back to
+  its original rhythm, so the timer was replaced, not delayed.
+- Connectivity makes no difference. On battery and not moving, the restart rate
+  is 5.6 per 100 intervals on cellular and 5.3 on Wi-Fi.
+- The Live session cache matched the Recorder exactly, so this application is not
+  dropping points either.
+
+**Mechanism, from the OwnTracks iOS source.** In move mode a repeating timer
+publishes a report every `locatorInterval` seconds. `LocationManager.wakeup`
+cancels that timer and creates a new one unconditionally, and the new timer first
+fires a full interval after it is created. The report that was about to be sent
+is therefore dropped, leaving a hole of one interval plus however long it had been
+since the last report. `wakeup` has exactly two callers: OwnTracks coming to the
+foreground, and `doRefresh`, the handler iOS runs for Background App Refresh.
+Changing the monitoring mode also recreates the timer.
+
+Baseline over the same 30 days. A restart is a timer interval of 66 to 125
+seconds while moving; a hole is any gap of 99 seconds or more while moving:
+
+| Activity | Rides | Timer intervals while moving | Restarts per 100 | Track holes |
+| --- | --- | --- | --- | --- |
+| Car | 149 | 2,630 | 0.3 | 2 |
+| Bike | 15 | 613 | 4.4 | 16 |
+| Other | - | 596 | 4.7 | 6 |
+
+Across all intervals, moving or not, the rate is 5.2 per 100 on battery, 0.5
+while charging or full, and 0.8 overnight. Restarts total about seven a day and typically
+recur 8 to 9 minutes apart. The phone charges in the car, which is why car rides
+are barely affected, while bike rides run on battery.
+
+Background App Refresh is the prime suspect: it is one of only two callers of
+`wakeup`, the regular spacing points to a scheduled task rather than user
+action, and the user was not opening OwnTracks during rides. The Recorder data
+cannot show what the phone itself was doing, however, so the attribution stays a
+hypothesis until the observation period confirms or refutes it.
+
+**Related findings, not the cause:**
+
+- The iOS client stores QoS 1 and 2 reports on the phone and resends them after
+  reconnecting, but drops QoS 0 reports sent while disconnected. Keep the
+  OwnTracks QoS setting at 1 or higher.
+- The Recorder subscribes with QoS 2 and a persistent session, but its default
+  MQTT client ID includes its process ID. A Recorder restart can therefore start
+  a new session and miss reports published while it was down. A fixed
+  `OTR_CLIENTID` would let the broker hold them.
+- `live_poll` and the push worker start each fetch at the newest fix already
+  received. Points delayed in order, such as after a dead zone, are picked up
+  correctly, but a point arriving out of order would be skipped until the
+  session is resumed. This has not been observed. The Recorder stores fix time
+  rather than receipt time, so arrival order cannot be measured. Overlapping the
+  fetch window by a few minutes would remove the risk.
+
+**Fallbacks if the mitigation fails,** in order:
+
+1. Set `locatorInterval` to 30 seconds so a restart can cost at most about one
+   minute. This doubles the point count, adds more stationary GPS jitter to
+   distance, and makes distances slightly longer than older rides, because
+   `ROAD_FACTOR` was tuned for one-minute spacing.
+2. Make `calculate_track_distance()` gap-aware. For a hole while moving,
+   estimate the path from the reported speed, bounded between the straight line
+   and a right-angle corner path.
+3. Report the behavior to the OwnTracks iOS project: `wakeup` should keep a timer
+   that is still valid instead of replacing it.
 
 ### The push worker does not pick up code changes
 
