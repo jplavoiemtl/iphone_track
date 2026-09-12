@@ -125,6 +125,30 @@ so neither damaged a moving track, but blocks of missing reports are a different
 failure from a single restart and are worth watching during the observation
 period.
 
+#### Observation Log
+
+**2026-09-11, evening.** Three car rides, a 13-minute walk on battery, and the
+time between them, all with the setting off:
+
+| Condition | Intervals | Restarts | Missing reports |
+| --- | --- | --- | --- |
+| Car rides, moving, mostly charging | 76 | 0 | 0 |
+| On battery, any activity | 108 | 0 | 0 |
+
+The old rate predicted about six restarts across those 108 battery intervals, so
+zero is roughly a one in 300 result and supports the bench test. Criterion 3 is
+met. Criterion 1 has one calendar day and about 1.8 hours on battery so far, all
+clean. No bike ride yet.
+
+One restart did occur with the setting off, as the phone was plugged in at the
+start of a drive while still stopped. It matches the charging-change trigger in
+the 30-day history, about 10 restarts per 100 intervals, and is independent of
+Background App Refresh. Plugging in before moving keeps it harmless; plugging in
+mid-ride would cost a point.
+
+Move mode is switched off between rides, so the silences in the record are
+deliberate and are excluded from every count.
+
 #### Acceptance Criteria
 
 1. Over at least three days that include normal time on battery, restarts on
