@@ -1,7 +1,7 @@
 # iPhone Tracker Project Plan
 
 **Status:** Canonical planning document  
-**Last updated:** 2026-09-11
+**Last updated:** 2026-09-14
 
 ## Purpose
 
@@ -51,11 +51,12 @@ When starting work, add one item here with:
 - Acceptance criteria and tests
 - Status: Planned, In progress, Blocked, or Ready for review
 
-Only one major feature should normally be active at a time.
+Only one major feature should normally be active at a time. Nothing is active
+now; the completed item below is kept for its method and its results.
 
 ### Verify the OwnTracks timer-restart mitigation
 
-**Status:** In progress, started 2026-09-11
+**Status:** Complete 2026-09-14
 
 #### Goal and User Benefit
 
@@ -148,6 +149,33 @@ mid-ride would cost a point.
 
 Move mode is switched off between rides, so the silences in the record are
 deliberate and are excluded from every count.
+
+**2026-09-12 to 2026-09-14.** Thirteen car rides, two bike rides, and the time
+between them:
+
+| Condition | Intervals | Restarts | Holes |
+| --- | --- | --- | --- |
+| On battery, any activity | 174 | 1 | - |
+| Car rides, moving | 414 | 1 | 0 |
+| Bike rides, moving | 71 | 1 | 1 |
+
+Criterion 1 is met: 0.6 restarts per 100 intervals on battery against a baseline
+of 5.4. Criterion 3 is met: 0.2 on car rides against 0.3, with no holes across
+414 moving intervals. Criterion 2 is not met. Of the two bike rides, the first
+was clean across 33 intervals and the second carried one restart that left a
+107-second hole while moving at 17 km/h, which is exactly the symptom this work
+set out to remove.
+
+Both restarts in this period came 1 to 2 minutes after move mode was switched on
+at the start of a ride, which points at the app being reopened rather than at
+Background App Refresh. The item is closed on that basis rather than on a third
+clean bike ride: the dominant cause is fixed and measured, and the residual has a
+known trigger and a behavioural workaround. If holes reappear on rides where
+OwnTracks was left alone throughout, reopen this item and take the fallbacks.
+
+Unrelated to the restarts, tracking is sometimes switched on after a ride has
+already begun, so a ride's first minute or two can be missing from the track.
+Ride statistics measure from the first fix, so the figures stay correct.
 
 #### Acceptance Criteria
 
@@ -603,9 +631,12 @@ future occurrence unambiguous and cost nothing.
 
 ### Ride tracks occasionally skip a one-minute GPS report
 
-**Observed:** reported 2026-09-11. **Status:** traced to the OwnTracks iOS app,
-not the network. A phone-side mitigation was applied on 2026-09-11 and is under
-observation; see Active Work.
+**Observed:** reported 2026-09-11. **Status:** cause confirmed and largely
+resolved on 2026-09-14. Turning off iOS Background App Refresh for OwnTracks cut
+timer restarts on battery from 5.4 per 100 intervals to 0.6, verified by a paired
+bench test and three days of ordinary use. A small residual remains, described
+under Outcome below: bringing OwnTracks to the foreground restarts the timer the
+same way, which costs a report if it happens after a ride has started.
 
 During a ride the phone reports once a minute, but now and then one report is
 missing. When the missing report falls in a turn, the straight segment between
@@ -687,6 +718,33 @@ hypothesis until the observation period confirms or refutes it.
 3. Report the behavior to the OwnTracks iOS project: `wakeup` should keep a timer
    that is still valid instead of replacing it.
 
+**Outcome, 2026-09-14.** A paired bench test plus three days of ordinary use:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Restarts per 100 intervals on battery | 5.4 | 0.6 |
+| Bike rides | 4.4 restarts and 2.6 holes per 100 | 2 rides: one clean, one with a single hole |
+| Car rides | 0.3 restarts per 100 | 0.2 over 414 moving intervals, no holes |
+
+Two restarts happened in those three days, each one 1 to 2 minutes after move
+mode was switched on at the start of a ride. One of them cost a point mid-ride on
+a bike: 107 seconds and 473 metres at 17 km/h. Regions and monitoring-mode
+changes are ruled out, because no report in the period listed a region and the
+mode never left move. With Background App Refresh off, the only remaining caller
+of the routine that recreates the timer is the app coming to the foreground. This
+is confirmed rather than inferred: the user opened OwnTracks shortly after
+starting the 2026-09-14 bike ride to check that it was tracking, which accounts
+for that restart and for the hole it left.
+
+The practical rule that follows: switch move mode on, then leave OwnTracks alone
+for the rest of the ride. Watching progress on the Live map in the browser is
+safe, since that is a different app. Reopening OwnTracks to check on it is what
+costs a report.
+
+The fallbacks above stay available if the residual ever matters. A 30-second
+interval would bound the cost of any restart, and a gap-aware distance
+calculation would absorb it.
+
 ### The push worker does not pick up code changes
 
 Only the web container runs with auto-reload. The push worker container loads
@@ -711,6 +769,7 @@ with the previous formula until it was restarted.
 - 2026-07: Fixed map recentering during dense multi-day track playback
 - 2026-07: Reconciled Live and date/time ride statistics on a shared GPS stat window
 - 2026-07: Replaced the exposed self-signed TLS certificate with a name-constrained private CA
+- 2026-09: Traced skipped GPS reports to the OwnTracks iOS move-mode timer and cut them ninefold by turning off iOS Background App Refresh
 
 ## Planning Workflow
 
