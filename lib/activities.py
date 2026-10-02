@@ -7,7 +7,7 @@ from lib.geo import (
 )
 
 
-def parse_activities(raw_data):
+def parse_activities(raw_data, marker_warnings=None):
     gps_points = []
     lwt_markers = []
 
@@ -37,6 +37,19 @@ def parse_activities(raw_data):
     for marker in lwt_markers:
         activity_type = marker.get("activity", "")
         timestamp = marker["tst"]
+
+        kind, _, event = activity_type.partition('_')
+        if kind in ('car', 'bike'):
+            reason = None
+            if event == 'start' and kind in active_activities:
+                reason = 'Repeated start ignored; original start retained'
+            elif event == 'end' and kind not in active_activities:
+                reason = 'Unmatched end ignored; no start inferred'
+            if reason:
+                if marker_warnings is not None:
+                    marker_warnings.append({'activity': activity_type, 'tst': timestamp,
+                                            'message': reason})
+                continue
 
         if activity_type == "car_start":
             active_activities['car'] = timestamp

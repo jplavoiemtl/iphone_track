@@ -301,6 +301,14 @@ function displaySummary(data) {
     lines.push('Total GPS Points: ' + data.total_points.toLocaleString());
     lines.push('Activity Markers Found: ' + data.activity_markers);
     lines.push('');
+    if (data.marker_warnings && data.marker_warnings.length) {
+        lines.push('MARKERS NEED REVIEW:');
+        data.marker_warnings.forEach(function(warning) {
+            lines.push('  ' + warning.time + ' - ' + warning.activity + ': ' + warning.message);
+        });
+        lines.push('Ride boundaries may need manual review.');
+        lines.push('');
+    }
     lines.push('AVAILABLE LAYERS:');
     lines.push('-'.repeat(30));
 

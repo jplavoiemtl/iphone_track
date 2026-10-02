@@ -138,7 +138,10 @@ def detect_activities():
             "error": f"No data for time range {start_time}-{end_time} in {tz_name}"
         }), 404
 
-    gps_points, activities = parse_activities(raw_data)
+    marker_warnings = []
+    gps_points, activities = parse_activities(raw_data, marker_warnings)
+    for warning in marker_warnings:
+        warning['time'] = datetime.fromtimestamp(warning['tst'], tz=pytz.UTC).astimezone(detected_tz).strftime('%b %d, %H:%M:%S')
 
     if not gps_points:
         return jsonify({"success": False, "error": "No GPS points found in the data"}), 404
@@ -209,6 +212,7 @@ def detect_activities():
         "timezone": tz_name,
         "total_points": len(gps_points),
         "activity_markers": len(lwt_markers),
+        "marker_warnings": marker_warnings,
         "stats": stats_response,
         "rides": rides_summary,
         "timeline": timeline

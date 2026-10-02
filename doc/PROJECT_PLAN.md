@@ -1,7 +1,7 @@
 # iPhone Tracker Project Plan
 
 **Status:** Canonical planning document  
-**Last updated:** 2026-09-14
+**Last updated:** 2026-10-02
 
 ## Purpose
 
@@ -42,6 +42,21 @@ The application currently includes:
 
 ## Active Work
 
+### Resilient car and bike marker pairing
+
+**Status:** Complete; user verified 2026-10-02. All 17 Python tests passed. Historical replay
+and the Date/Time API return two bike rides with two marker warnings; the second
+ride now begins in the afternoon. The user confirmed both rides and the warnings
+are correct and chose to retain the original markers without manual corrections.
+
+- Preserve the original start when another start arrives during an active ride.
+- Ignore unmatched ends instead of inventing a start at the first GPS fix.
+- Recover open starts from earlier markers when the selected range begins mid-ride.
+- Show marker warnings with local times in Date/Time detection results.
+- Validate repeated starts, unmatched ends, and partial ranges with synthetic tests;
+  replay the reported September day before any user-directed marker correction.
+- Source marker files remain unchanged; uncertain boundaries require manual review.
+
 When starting work, add one item here with:
 
 - Goal and user benefit
@@ -51,8 +66,8 @@ When starting work, add one item here with:
 - Acceptance criteria and tests
 - Status: Planned, In progress, Blocked, or Ready for review
 
-Only one major feature should normally be active at a time. Nothing is active
-now; the completed item below is kept for its method and its results.
+Only one major feature should normally be active at a time. The completed
+item below is kept for its method and its results.
 
 ### Verify the OwnTracks timer-restart mitigation
 
@@ -755,6 +770,10 @@ with the previous formula until it was restarted.
 
 ## Completed Milestones
 
+- 2026-10-02: Verified resilient car/bike marker pairing and Date/Time review
+  warnings. Repeated starts and unmatched ends no longer fabricate morning rides;
+  original marker records retained by user choice.
+
 - 2026-02: Converted the original tracker into a Flask web application
 - 2026-02: Added Live Mode, session persistence, history, and activity layers
 - 2026-02: Added push notifications and live-mode resilience improvements
@@ -793,4 +812,3 @@ reference material that does not belong in a project plan.
 - `HTTPS_Wake_Lock_Plan.md` - HTTPS and Wake Lock deployment work
 - `Move_to_labpi_Implementation_Plan.md` - Raspberry Pi deployment plan
 - `architecture.md` - original application architecture
-

@@ -14,6 +14,7 @@ def read_activity_markers_file(start_datetime, end_datetime):
         end_timestamp = int(end_datetime.timestamp())
 
         lwt_items = []
+        preceding = []
 
         with open(markers_file, 'r', encoding='utf-8') as f:
             for line in f:
@@ -25,19 +26,40 @@ def read_activity_markers_file(start_datetime, end_datetime):
                     if "activity" in marker and "tst" in marker:
                         marker_timestamp = marker["tst"]
                         activity = marker["activity"]
-                        if start_timestamp <= marker_timestamp <= end_timestamp:
+                        if marker_timestamp <= end_timestamp:
                             full_marker = {
                                 "_type": "lwt",
                                 "tst": marker_timestamp,
                                 "custom": True,
                                 "activity": activity
                             }
-                            lwt_items.append(full_marker)
+                            if marker_timestamp < start_timestamp:
+                                preceding.append(full_marker)
+                            else:
+                                lwt_items.append(full_marker)
                 except json.JSONDecodeError:
                     continue
                 except Exception:
                     continue
 
+        # Recover starts still open at the selected boundary. Repeated starts
+        # preserve the first start, matching the activity parser.
+        active = {}
+        for marker in sorted(preceding, key=lambda x: x['tst']):
+            kind, _, event = marker['activity'].partition('_')
+            if kind not in ('car', 'bike'):
+                continue
+            if event == 'start':
+                active.setdefault(kind, marker)
+            elif event == 'end':
+                active.pop(kind, None)
+        # A start in the selected range takes precedence over stale history.
+        # Recover context only for an end that would otherwise lack a start.
+        for kind, marker in active.items():
+            first = next((m for m in sorted(lwt_items, key=lambda x: x['tst'])
+                          if m['activity'].startswith(kind + '_')), None)
+            if first and first['activity'] == kind + '_end':
+                lwt_items.append(marker)
         lwt_items.sort(key=lambda x: x["tst"])
         return lwt_items
 
